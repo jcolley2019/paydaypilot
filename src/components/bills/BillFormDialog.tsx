@@ -22,6 +22,7 @@ import {
 import type { Bill, BillCategory, BillInsert, CspBucket, DueRule } from '@/types/bills'
 import { BILL_CATEGORIES, CSP_BUCKETS } from '@/types/bills'
 import { CATEGORY_LABELS, CSP_BUCKET_LABELS } from '@/lib/billLabels'
+import { DayOfMonthPicker, type DayOfMonthValue } from '@/components/bills/DayOfMonthPicker'
 
 type RuleType = DueRule['type']
 
@@ -232,7 +233,17 @@ export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormD
 
           <div className="flex flex-col gap-2 rounded-lg border border-input p-3">
             <Label>Due rule</Label>
-            <Select value={form.ruleType} onValueChange={(v) => update('ruleType', v as RuleType)}>
+            <Select
+              value={form.ruleType}
+              onValueChange={(v) => {
+                const nextType = v as RuleType
+                setForm((f) => ({
+                  ...f,
+                  ruleType: nextType,
+                  monthlyDay: nextType === 'monthly_day' && f.ruleType === 'last_day' ? '' : f.monthlyDay,
+                }))
+              }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -247,14 +258,16 @@ export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormD
             {form.ruleType === 'monthly_day' && (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="rule-day">Day of month</Label>
-                <Input
+                <DayOfMonthPicker
                   id="rule-day"
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={form.monthlyDay}
-                  onChange={(e) => update('monthlyDay', e.target.value)}
-                  required
+                  value={form.monthlyDay === '' ? null : Number(form.monthlyDay)}
+                  onChange={(v: DayOfMonthValue) => {
+                    if (v === 'last') {
+                      setForm((f) => ({ ...f, ruleType: 'last_day' }))
+                    } else {
+                      update('monthlyDay', String(v))
+                    }
+                  }}
                 />
               </div>
             )}

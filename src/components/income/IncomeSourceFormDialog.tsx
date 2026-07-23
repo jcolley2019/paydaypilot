@@ -20,6 +20,7 @@ import {
 import { SCHEDULE_LABELS } from '@/lib/scheduleLabels'
 import type { IncomeSource, IncomeSourceInsert, Schedule } from '@/types/payday'
 import { SCHEDULES } from '@/types/payday'
+import { DayOfMonthPicker, type DayOfMonthValue } from '@/components/bills/DayOfMonthPicker'
 
 interface FormState {
   name: string
@@ -187,46 +188,36 @@ export function IncomeSourceFormDialog({
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="income-semi-first">First day</Label>
-                    <Input
+                    <DayOfMonthPicker
                       id="income-semi-first"
-                      type="number"
-                      min="1"
-                      max="31"
-                      value={form.semimonthlyFirst}
-                      onChange={(e) => update('semimonthlyFirst', e.target.value)}
-                      required
+                      value={Number(form.semimonthlyFirst) === 31 ? 'last' : Number(form.semimonthlyFirst)}
+                      onChange={(v: DayOfMonthValue) =>
+                        update('semimonthlyFirst', v === 'last' ? '31' : String(v))
+                      }
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="income-semi-second">Second day</Label>
-                    <Input
+                    <DayOfMonthPicker
                       id="income-semi-second"
-                      type="number"
-                      min="1"
-                      max="31"
-                      value={form.semimonthlySecond}
-                      onChange={(e) => update('semimonthlySecond', e.target.value)}
-                      required
+                      value={Number(form.semimonthlySecond) === 31 ? 'last' : Number(form.semimonthlySecond)}
+                      onChange={(v: DayOfMonthValue) =>
+                        update('semimonthlySecond', v === 'last' ? '31' : String(v))
+                      }
                     />
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">31 = last day of the month</p>
               </div>
             )}
 
             {form.schedule === 'monthly' && (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="income-monthly-day">Day of month</Label>
-                <Input
+                <DayOfMonthPicker
                   id="income-monthly-day"
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={form.monthlyDay}
-                  onChange={(e) => update('monthlyDay', e.target.value)}
-                  required
+                  value={Number(form.monthlyDay) === 31 ? 'last' : Number(form.monthlyDay)}
+                  onChange={(v: DayOfMonthValue) => update('monthlyDay', v === 'last' ? '31' : String(v))}
                 />
-                <p className="text-xs text-muted-foreground">31 = last day of the month</p>
               </div>
             )}
 
