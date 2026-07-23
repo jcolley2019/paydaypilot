@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button'
 import { useIncomeSources } from '@/hooks/useIncomeSources'
 import { usePaydayEngine } from '@/hooks/usePaydayEngine'
+import { useBuckets } from '@/hooks/useBuckets'
 import { PaycheckCard } from '@/components/dashboard/PaycheckCard'
 
 const VISIBLE_PAYCHECKS = 4
@@ -10,6 +11,7 @@ const VISIBLE_PAYCHECKS = 4
 export function Dashboard() {
   const { incomeSources, loading: incomeLoading } = useIncomeSources()
   const { paychecks, instances, loading, markPaid, markUnpaid, reassign } = usePaydayEngine()
+  const { buckets, entries, addEntry } = useBuckets()
 
   const upcoming = paychecks.slice(0, VISIBLE_PAYCHECKS)
 
@@ -59,9 +61,14 @@ export function Dashboard() {
             paycheck={paycheck}
             instances={instances.filter((i) => i.paycheck_id === paycheck.id)}
             otherPaychecks={paychecks.filter((pc) => pc.id !== paycheck.id)}
+            buckets={buckets}
+            entries={entries}
             onMarkPaid={markPaid}
             onMarkUnpaid={markUnpaid}
             onReassign={reassign}
+            onLogContribution={(bucketId, paycheckId, amount) =>
+              addEntry(bucketId, amount, 'Paycheck contribution', paycheckId)
+            }
           />
         ))}
       </div>
