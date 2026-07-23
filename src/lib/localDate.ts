@@ -19,6 +19,10 @@ export function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * MS_PER_DAY)
 }
 
+export function addMonths(d: Date, months: number): Date {
+  return new Date(d.getFullYear(), d.getMonth() + months, d.getDate())
+}
+
 export function daysInMonth(year: number, month0: number): number {
   return new Date(year, month0 + 1, 0).getDate()
 }

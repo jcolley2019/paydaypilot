@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
+import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 
 export interface Profile {
@@ -25,6 +26,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
+  updateProfile: (updates: Partial<Omit<Profile, 'id'>>) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -90,6 +92,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function updateProfile(updates: Partial<Omit<Profile, 'id'>>) {
+    if (!session?.user) return
+    const { error } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('id', session.user.id)
+    if (error) {
+      toast.error(`Failed to update profile: ${error.message}`)
+      return
+    }
+    await fetchProfile(session.user.id)
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -100,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signOut,
         refreshProfile,
+        updateProfile,
       }}
     >
       {children}

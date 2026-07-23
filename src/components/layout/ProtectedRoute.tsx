@@ -4,10 +4,11 @@ import { useAuth } from '@/contexts/AuthContext'
 
 interface ProtectedRouteProps {
   children: ReactNode
+  requireOnboarded?: boolean
 }
 
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { session, loading } = useAuth()
+export function ProtectedRoute({ children, requireOnboarded = true }: ProtectedRouteProps) {
+  const { session, profile, loading } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -16,6 +17,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (!session) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />
+  }
+
+  if (requireOnboarded && profile && !profile.onboarded) {
+    return <Navigate to="/onboarding" replace />
   }
 
   return <>{children}</>

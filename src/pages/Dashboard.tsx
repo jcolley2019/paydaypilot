@@ -1,17 +1,32 @@
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { useAuth } from '@/contexts/AuthContext'
 import { useIncomeSources } from '@/hooks/useIncomeSources'
 import { usePaydayEngine } from '@/hooks/usePaydayEngine'
 import { useBuckets } from '@/hooks/useBuckets'
+import { useBills } from '@/hooks/useBills'
 import { PaycheckCard } from '@/components/dashboard/PaycheckCard'
+import { PlanStatusStrip } from '@/components/dashboard/PlanStatusStrip'
+import { cspBreakdown, worstCspCategory, babyStepStatus } from '@/lib/plan'
 
 const VISIBLE_PAYCHECKS = 4
 
 export function Dashboard() {
+  const { profile } = useAuth()
   const { incomeSources, loading: incomeLoading } = useIncomeSources()
   const { paychecks, instances, loading, markPaid, markUnpaid, reassign } = usePaydayEngine()
   const { buckets, entries, addEntry } = useBuckets()
+  const { bills } = useBills()
+
+  const philosophy = (profile?.philosophy as 'csp' | 'ramsey' | 'hybrid' | null) ?? 'hybrid'
+  const breakdown = useMemo(
+    () => cspBreakdown(bills, buckets, incomeSources),
+    [bills, buckets, incomeSources],
+  )
+  const worstCategory = useMemo(() => worstCspCategory(breakdown), [breakdown])
+  const babySteps = useMemo(() => babyStepStatus(buckets, bills), [buckets, bills])
 
   const upcoming = paychecks.slice(0, VISIBLE_PAYCHECKS)
 
@@ -42,6 +57,13 @@ export function Dashboard() {
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-sm text-muted-foreground">Your next {VISIBLE_PAYCHECKS} paychecks</p>
       </div>
+
+      <PlanStatusStrip
+        philosophy={philosophy}
+        breakdown={breakdown}
+        worstCategory={worstCategory}
+        nextAction={babySteps.nextAction}
+      />
 
       {!loading && upcoming.length === 0 && (
         <Card>

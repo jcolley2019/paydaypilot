@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -20,12 +21,26 @@ export function Buckets() {
   const { buckets, entries, loading, createBucket, updateBucket, deleteBucket, addEntry } =
     useBuckets()
   const { paychecks } = usePaydayEngine()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingBucket, setEditingBucket] = useState<Bucket | null>(null)
   const [entryDialog, setEntryDialog] = useState<{ bucket: Bucket; mode: 'deposit' | 'withdraw' } | null>(
     null,
   )
+
+  useEffect(() => {
+    const editId = searchParams.get('edit')
+    if (!editId) return
+    const bucket = buckets.find((b) => b.id === editId)
+    if (!bucket) return
+    setEditingBucket(bucket)
+    setDialogOpen(true)
+    setSearchParams((params) => {
+      params.delete('edit')
+      return params
+    })
+  }, [searchParams, buckets, setSearchParams])
 
   const sorted = useMemo(() => sortBuckets(buckets), [buckets])
   const nextSort = useMemo(
