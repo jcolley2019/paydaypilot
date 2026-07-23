@@ -1,0 +1,15 @@
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+if (
+  !supabaseUrl ||
+  !supabaseAnonKey ||
+  supabaseUrl.includes('PASTE_') ||
+  supabaseAnonKey.includes('PASTE_')
+) {
+  throw new Error('Supabase env vars not set — fill in .env.local')
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
