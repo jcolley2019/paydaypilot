@@ -1,9 +1,21 @@
-import { NavLink, Outlet } from 'react-router-dom'
-import { Compass } from 'lucide-react'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Compass, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { navItems } from './nav-items'
+import { useAuth } from '@/contexts/AuthContext'
+import { Button } from '@/components/ui/button'
 
 export function AppShell() {
+  const { user, profile, signOut } = useAuth()
+  const navigate = useNavigate()
+
+  async function handleSignOut() {
+    await signOut()
+    navigate('/login', { replace: true })
+  }
+
+  const displayName = profile?.display_name || user?.email || ''
+
   return (
     <div className="min-h-svh bg-background text-foreground">
       <div className="flex min-h-svh">
@@ -32,12 +44,35 @@ export function AppShell() {
               </NavLink>
             ))}
           </nav>
+          <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-3">
+            <span className="min-w-0 truncate text-sm text-muted-foreground">{displayName}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleSignOut}
+              aria-label="Sign out"
+            >
+              <LogOut className="size-4" />
+            </Button>
+          </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-16 items-center border-b border-border px-4 md:hidden">
-            <Compass className="size-5 text-primary" />
-            <span className="ml-2 text-base font-semibold tracking-tight">PaydayPilot</span>
+          <header className="flex h-16 items-center justify-between border-b border-border px-4 md:hidden">
+            <div className="flex items-center">
+              <Compass className="size-5 text-primary" />
+              <span className="ml-2 text-base font-semibold tracking-tight">PaydayPilot</span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleSignOut}
+              aria-label="Sign out"
+            >
+              <LogOut className="size-4" />
+            </Button>
           </header>
 
           <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-8 md:pb-8">
