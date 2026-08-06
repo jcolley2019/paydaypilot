@@ -50,7 +50,7 @@ export function YearCalendar({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold tracking-tight">{year}</h2>
+        <h2 className="pp-display text-lg">{year}</h2>
         <div className="flex items-center gap-1">
           <Button
             type="button"
@@ -90,7 +90,7 @@ export function YearCalendar({
               }}
               className="flex cursor-pointer flex-col gap-2 rounded-xl bg-card p-3 text-card-foreground ring-1 ring-foreground/10 outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <span className="text-sm font-medium">{label}</span>
+              <span className="pp-label text-sm font-medium">{label}</span>
               <div className="grid grid-cols-7 gap-0.5">
                 {grid.map((date) => {
                   const inMonth = date.getMonth() === month0
@@ -104,7 +104,7 @@ export function YearCalendar({
                       className={cn(
                         'flex h-2.5 items-center justify-center gap-0.5',
                         !inMonth && 'invisible',
-                        iso === todayISO && inMonth && 'rounded-full ring-2 ring-primary',
+                        iso === todayISO && inMonth && 'rounded-full ring-2 ring-pp-today',
                       )}
                     >
                       {hasPayday && <CalendarMarker kind="payday" size="xs" />}

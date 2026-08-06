@@ -15,9 +15,10 @@ const SIZE_CLASSES: Record<'sm' | 'xs', string> = {
   xs: 'size-1',
 }
 
+/** Theme tokens: default resolves to the shipped emerald/sky, bright variants supply muted-warm hues. */
 const COLOR_CLASSES: Record<CalendarMarkerKind, string> = {
-  payday: 'bg-emerald-500',
-  'bill-due': 'bg-sky-500',
+  payday: 'bg-pp-payday',
+  'bill-due': 'bg-pp-bill',
   'bill-paid': 'bg-muted-foreground',
 }
 

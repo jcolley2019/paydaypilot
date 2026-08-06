@@ -72,7 +72,9 @@ export function PaycheckCard({
             <CardTitle>{formatPayDate(paycheck.pay_date)}</CardTitle>
             <CardDescription>{paycheck.sourceName}</CardDescription>
           </div>
-          <span className="font-medium">{formatAmount(paycheck.expected_amount, 'fixed')}</span>
+          <span className="pp-money text-base font-medium">
+            {formatAmount(paycheck.expected_amount, 'fixed')}
+          </span>
         </div>
       </CardHeader>
 

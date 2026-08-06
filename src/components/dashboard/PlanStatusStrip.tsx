@@ -35,7 +35,7 @@ export function PlanStatusStrip({
   return (
     <Link
       to="/plan"
-      className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:bg-accent/50"
+      className="pp-status-strip flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:bg-accent/50"
     >
       <Badge variant="secondary">{PHILOSOPHY_LABELS[philosophy]}</Badge>
       <span className="min-w-0 flex-1 truncate text-muted-foreground">{message}</span>
