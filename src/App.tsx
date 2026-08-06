@@ -11,10 +11,12 @@ import { Plan } from '@/pages/Plan'
 import { Settings } from '@/pages/Settings'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { OfflineBanner } from '@/components/layout/OfflineBanner'
 
 function App() {
   return (
     <TooltipProvider>
+      <OfflineBanner />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
