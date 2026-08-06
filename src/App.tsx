@@ -6,6 +6,7 @@ import { Onboarding } from '@/pages/Onboarding'
 import { Dashboard } from '@/pages/Dashboard'
 import { Bills } from '@/pages/Bills'
 import { Buckets } from '@/pages/Buckets'
+import { Credit } from '@/pages/Credit'
 import { Plan } from '@/pages/Plan'
 import { Settings } from '@/pages/Settings'
 import { Toaster } from '@/components/ui/sonner'
@@ -34,6 +35,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/bills" element={<Bills />} />
           <Route path="/buckets" element={<Buckets />} />
+          <Route path="/credit" element={<Credit />} />
           <Route path="/plan" element={<Plan />} />
           <Route path="/settings" element={<Settings />} />
         </Route>

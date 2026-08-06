@@ -19,8 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { Bill, BillCategory, BillInsert, CspBucket, DueRule } from '@/types/bills'
-import { BILL_CATEGORIES, CSP_BUCKETS } from '@/types/bills'
+import type { AccountType, Bill, BillCategory, BillInsert, CspBucket, DueRule } from '@/types/bills'
+import { ACCOUNT_TYPES, BILL_CATEGORIES, CSP_BUCKETS } from '@/types/bills'
 import { CATEGORY_LABELS, CSP_BUCKET_LABELS } from '@/lib/billLabels'
 import { DayOfMonthPicker, type DayOfMonthValue } from '@/components/bills/DayOfMonthPicker'
 
@@ -44,7 +44,14 @@ interface FormState {
   debtBalance: string
   debtApr: string
   debtMinPayment: string
+  accountType: AccountType | ''
+  creditLimit: string
   active: boolean
+}
+
+const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  card: 'Credit card',
+  loan: 'Loan',
 }
 
 function todayISO(): string {
@@ -73,6 +80,8 @@ function emptyForm(): FormState {
     debtBalance: '',
     debtApr: '',
     debtMinPayment: '',
+    accountType: '',
+    creditLimit: '',
     active: true,
   }
 }
@@ -91,6 +100,8 @@ function formFromBill(bill: Bill): FormState {
   base.debtBalance = bill.debt_balance != null ? String(bill.debt_balance) : ''
   base.debtApr = bill.debt_apr != null ? String(bill.debt_apr) : ''
   base.debtMinPayment = bill.debt_min_payment != null ? String(bill.debt_min_payment) : ''
+  base.accountType = bill.account_type ?? ''
+  base.creditLimit = bill.credit_limit != null ? String(bill.credit_limit) : ''
   base.active = bill.active
 
   base.ruleType = bill.due_rule.type
@@ -158,6 +169,11 @@ export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormD
         debt_balance: form.isDebt && form.debtBalance ? Number(form.debtBalance) : null,
         debt_apr: form.isDebt && form.debtApr ? Number(form.debtApr) : null,
         debt_min_payment: form.isDebt && form.debtMinPayment ? Number(form.debtMinPayment) : null,
+        account_type: form.isDebt && form.accountType ? form.accountType : null,
+        credit_limit:
+          form.isDebt && form.accountType === 'card' && form.creditLimit
+            ? Number(form.creditLimit)
+            : null,
         csp_bucket: form.cspBucket,
         active: form.active,
         notes: form.notes.trim() || null,
@@ -364,39 +380,75 @@ export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormD
           </div>
 
           {form.isDebt && (
-            <div className="grid grid-cols-3 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="debt-balance">Balance</Label>
-                <Input
-                  id="debt-balance"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.debtBalance}
-                  onChange={(e) => update('debtBalance', e.target.value)}
-                />
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="debt-balance">Balance</Label>
+                  <Input
+                    id="debt-balance"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.debtBalance}
+                    onChange={(e) => update('debtBalance', e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="debt-apr">APR %</Label>
+                  <Input
+                    id="debt-apr"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.debtApr}
+                    onChange={(e) => update('debtApr', e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="debt-min">Min payment</Label>
+                  <Input
+                    id="debt-min"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.debtMinPayment}
+                    onChange={(e) => update('debtMinPayment', e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="debt-apr">APR %</Label>
-                <Input
-                  id="debt-apr"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.debtApr}
-                  onChange={(e) => update('debtApr', e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="debt-min">Min payment</Label>
-                <Input
-                  id="debt-min"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.debtMinPayment}
-                  onChange={(e) => update('debtMinPayment', e.target.value)}
-                />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label>Account type</Label>
+                  <Select
+                    value={form.accountType}
+                    onValueChange={(v) => update('accountType', v as AccountType)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ACCOUNT_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {ACCOUNT_TYPE_LABELS[t]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {form.accountType === 'card' && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="debt-credit-limit">Credit limit</Label>
+                    <Input
+                      id="debt-credit-limit"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.creditLimit}
+                      onChange={(e) => update('creditLimit', e.target.value)}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
