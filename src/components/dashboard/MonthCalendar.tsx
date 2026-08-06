@@ -87,13 +87,14 @@ export function MonthCalendar({
           {MONTH_NAMES[month0]} {year}
         </h2>
         <div className="flex items-center gap-1">
-          <Button type="button" variant="outline" size="sm" onClick={goToToday}>
+          <Button type="button" variant="outline" size="sm" className="h-9" onClick={goToToday}>
             Today
           </Button>
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
+            className="size-9"
             aria-label="Previous month"
             onClick={() => goToMonth(-1)}
           >
@@ -103,6 +104,7 @@ export function MonthCalendar({
             type="button"
             variant="ghost"
             size="icon-sm"
+            className="size-9"
             aria-label="Next month"
             onClick={() => goToMonth(1)}
           >
@@ -165,7 +167,7 @@ export function MonthCalendar({
                         />
                       ))}
                       {day.bills.length > 4 && (
-                        <span className="text-[10px] leading-none text-muted-foreground">
+                        <span className="text-xs leading-none font-medium text-muted-foreground">
                           +{day.bills.length - 4}
                         </span>
                       )}
@@ -174,7 +176,7 @@ export function MonthCalendar({
                 </button>
               </PopoverTrigger>
               {hasContent && day && (
-                <PopoverContent className="w-72" align="start">
+                <PopoverContent className="w-72 max-w-[calc(100vw-2rem)]" align="start">
                   <div className="flex flex-col gap-3">
                     <p className="text-sm font-medium">{formatDayLabel(iso)}</p>
 

@@ -55,6 +55,7 @@ export function YearCalendar({
             type="button"
             variant="ghost"
             size="icon-sm"
+            className="size-9"
             aria-label="Previous year"
             onClick={() => onNavigateYear(-1)}
           >
@@ -64,6 +65,7 @@ export function YearCalendar({
             type="button"
             variant="ghost"
             size="icon-sm"
+            className="size-9"
             aria-label="Next year"
             onClick={() => onNavigateYear(1)}
           >
@@ -101,7 +103,7 @@ export function YearCalendar({
                       className={cn(
                         'flex h-2.5 items-center justify-center gap-0.5',
                         !inMonth && 'invisible',
-                        iso === todayISO && inMonth && 'rounded-full ring-1 ring-primary',
+                        iso === todayISO && inMonth && 'rounded-full ring-2 ring-primary',
                       )}
                     >
                       {hasPayday && <span className="size-1 rounded-full bg-emerald-500" />}
