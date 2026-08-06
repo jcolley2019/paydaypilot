@@ -5,7 +5,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarMarker } from '@/components/dashboard/CalendarMarker'
 import { cn } from '@/lib/utils'
 import { formatAmount } from '@/lib/billLabels'
-import { buildCalendarDays, monthGridDates } from '@/lib/calendar'
+import { buildCalendarDays, monthGridDates, numberPaychecksInMonth } from '@/lib/calendar'
+import type { CalendarBillEntry, CalendarPaycheckLabel, CalendarPaydayEntry } from '@/lib/calendar'
 import { addMonths, parseISODate, toISODate } from '@/lib/localDate'
 import type { PaycheckWithSource, BillInstanceWithBill } from '@/hooks/usePaydayEngine'
 import type { IncomeSource } from '@/types/payday'
@@ -16,6 +17,15 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
+
+/** Fixed 4-hue palette cycling per check, so bill chips visually pair with their payday. */
+const CHECK_HUE_CLASSES = [
+  'border-l-violet-500',
+  'border-l-amber-500',
+  'border-l-teal-500',
+  'border-l-rose-500',
+]
+const NO_CHECK_HUE_CLASS = 'border-l-transparent'
 
 function formatDayLabel(iso: string): string {
   return parseISODate(iso).toLocaleDateString('en-US', {
@@ -69,6 +79,36 @@ export function MonthCalendar({
   function paycheckLabel(paycheckId: string): string {
     const pc = paycheckById.get(paycheckId)
     return pc ? `${formatShortDate(pc.pay_date)} (${pc.sourceName})` : ''
+  }
+
+  // Month-scoped "Check N" numbering + hue, keyed for lookup by payday (sourceId+date)
+  // and by bill assignment (real paycheckId). Computed bills never carry a paycheckId,
+  // so they naturally fall through to "no assignment" below.
+  const checkLabels = useMemo(() => {
+    const monthPaydays: CalendarPaydayEntry[] = []
+    for (const day of calendarDays.values()) monthPaydays.push(...day.paydays)
+    return numberPaychecksInMonth(monthPaydays, year, month0)
+  }, [calendarDays, year, month0])
+
+  const checkByKey = useMemo(() => new Map(checkLabels.map((c) => [c.key, c])), [checkLabels])
+  const checkByPaycheckId = useMemo(() => {
+    const map = new Map<string, CalendarPaycheckLabel>()
+    for (const c of checkLabels) if (c.paycheckId) map.set(c.paycheckId, c)
+    return map
+  }, [checkLabels])
+
+  function checkForPayday(p: CalendarPaydayEntry): CalendarPaycheckLabel | undefined {
+    return checkByKey.get(`${p.sourceId}|${p.date}`)
+  }
+
+  function checkForBill(b: CalendarBillEntry): CalendarPaycheckLabel | undefined {
+    return b.paycheckId ? checkByPaycheckId.get(b.paycheckId) : undefined
+  }
+
+  function hueClassFor(check: CalendarPaycheckLabel | undefined): string {
+    if (!check) return NO_CHECK_HUE_CLASS
+    const index = checkLabels.indexOf(check)
+    return CHECK_HUE_CLASSES[index % CHECK_HUE_CLASSES.length]
   }
 
   const gridRef = useRef<HTMLDivElement>(null)
@@ -150,7 +190,7 @@ export function MonthCalendar({
           const tabIndex = index === activeIndex ? 0 : -1
 
           const buttonClassName = cn(
-            'flex min-h-16 flex-col items-start gap-1 rounded-md p-1.5 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+            'flex min-h-16 flex-col items-start gap-1 rounded-md p-1.5 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:min-h-28',
             inMonth ? 'text-foreground' : 'text-muted-foreground/50',
             hasContent ? 'hover:bg-accent/50' : 'cursor-default',
           )
@@ -166,23 +206,70 @@ export function MonthCalendar({
                 {date.getDate()}
               </span>
               {day && (
-                <div className="flex flex-wrap items-center gap-1">
-                  {day.paydays.map((p, i) => (
-                    <CalendarMarker key={`p-${i}`} kind="payday" weight={p.real ? 'solid' : 'ghost'} />
-                  ))}
-                  {day.bills.slice(0, 4).map((b, i) => (
-                    <CalendarMarker
-                      key={`b-${i}`}
-                      kind={b.status === 'paid' ? 'bill-paid' : 'bill-due'}
-                      weight={b.real ? 'solid' : 'ghost'}
-                    />
-                  ))}
-                  {day.bills.length > 4 && (
-                    <span className="text-xs leading-none font-medium text-muted-foreground">
-                      +{day.bills.length - 4}
-                    </span>
-                  )}
-                </div>
+                <>
+                  {/* Phone (below md): PP.5.3 shape markers only — detail lives in the popover. */}
+                  <div className="flex flex-wrap items-center gap-1 md:hidden">
+                    {day.paydays.map((p, i) => (
+                      <CalendarMarker key={`p-${i}`} kind="payday" weight={p.real ? 'solid' : 'ghost'} />
+                    ))}
+                    {day.bills.slice(0, 4).map((b, i) => (
+                      <CalendarMarker
+                        key={`b-${i}`}
+                        kind={b.status === 'paid' ? 'bill-paid' : 'bill-due'}
+                        weight={b.real ? 'solid' : 'ghost'}
+                      />
+                    ))}
+                    {day.bills.length > 4 && (
+                      <span className="text-xs leading-none font-medium text-muted-foreground">
+                        +{day.bills.length - 4}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Desktop/tablet (md+): bill names + payday check identifiers inline. */}
+                  <div className="hidden w-full flex-col gap-0.5 md:flex">
+                    {day.paydays.map((p, i) => {
+                      const check = checkForPayday(p)
+                      const label = check?.label ?? p.sourceName
+                      const text = `${label} · ${formatShortDate(p.date)} · ${formatAmount(p.amount, 'fixed')}`
+                      return (
+                        <div
+                          key={`p-${i}`}
+                          title={text}
+                          className={cn(
+                            'truncate rounded-sm border-l-2 bg-primary/10 px-1 py-0.5 text-[10px] font-medium leading-tight',
+                            hueClassFor(check),
+                            !p.real && 'opacity-40',
+                          )}
+                        >
+                          {text}
+                        </div>
+                      )
+                    })}
+                    {day.bills.slice(0, 2).map((b, i) => {
+                      const check = checkForBill(b)
+                      return (
+                        <div
+                          key={`b-${i}`}
+                          title={b.billName}
+                          className={cn(
+                            'truncate rounded-sm border-l-2 bg-accent/40 px-1 py-0.5 text-[10px] leading-tight',
+                            hueClassFor(check),
+                            !b.real && 'opacity-40',
+                            b.status === 'paid' && 'text-muted-foreground line-through',
+                          )}
+                        >
+                          {b.billName}
+                        </div>
+                      )
+                    })}
+                    {day.bills.length > 2 && (
+                      <span className="px-1 text-[10px] leading-tight font-medium text-muted-foreground">
+                        +{day.bills.length - 2} more
+                      </span>
+                    )}
+                  </div>
+                </>
               )}
             </>
           )
@@ -225,42 +312,54 @@ export function MonthCalendar({
                     {day.paydays.length > 0 && (
                       <div className="flex flex-col gap-1.5">
                         <span className="text-xs font-medium text-muted-foreground">Paydays</span>
-                        {day.paydays.map((p, i) => (
-                          <div key={i} className="flex items-center justify-between gap-2 text-sm">
-                            <span className={cn(!p.real && 'text-muted-foreground')}>
-                              {p.sourceName}
-                              {!p.real && ' · projected'}
-                            </span>
-                            <span>{formatAmount(p.amount, 'fixed')}</span>
-                          </div>
-                        ))}
+                        {day.paydays.map((p, i) => {
+                          const check = checkForPayday(p)
+                          return (
+                            <div key={i} className="flex items-center justify-between gap-2 text-sm">
+                              <span className={cn(!p.real && 'text-muted-foreground')}>
+                                {check ? `${check.label} · ${p.sourceName}` : p.sourceName}
+                                {!p.real && ' · projected'}
+                              </span>
+                              <span>{formatAmount(p.amount, 'fixed')}</span>
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
 
                     {day.bills.length > 0 && (
                       <div className="flex flex-col gap-1.5">
                         <span className="text-xs font-medium text-muted-foreground">Bills</span>
-                        {day.bills.map((b, i) => (
-                          <div key={i} className="flex flex-col gap-0.5 text-sm">
-                            <div className="flex items-center justify-between gap-2">
-                              <span
-                                className={cn(
-                                  (b.status === 'paid' || !b.real) && 'text-muted-foreground',
-                                  b.status === 'paid' && 'line-through',
-                                )}
-                              >
-                                {b.billName}
+                        {day.bills.map((b, i) => {
+                          const check = checkForBill(b)
+                          return (
+                            <div key={i} className="flex flex-col gap-0.5 text-sm">
+                              <div className="flex items-center justify-between gap-2">
+                                <span
+                                  className={cn(
+                                    (b.status === 'paid' || !b.real) && 'text-muted-foreground',
+                                    b.status === 'paid' && 'line-through',
+                                  )}
+                                >
+                                  {b.billName}
+                                </span>
+                                <span>{formatAmount(b.amount, b.amountType)}</span>
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {b.dueRuleLabel}
+                                {!b.real && ' · projected'}
+                                {b.real && b.status === 'paid' && ' · Paid'}
                               </span>
-                              <span>{formatAmount(b.amount, b.amountType)}</span>
+                              {b.real && b.paycheckId && (
+                                <span className="text-xs text-muted-foreground">
+                                  {check
+                                    ? `Comes out of ${check.label} · ${formatShortDate(check.date)}`
+                                    : `Comes out of ${paycheckLabel(b.paycheckId)}`}
+                                </span>
+                              )}
                             </div>
-                            <span className="text-xs text-muted-foreground">
-                              {b.dueRuleLabel}
-                              {!b.real && ' · projected'}
-                              {b.real && b.status === 'paid' && ' · Paid'}
-                              {b.real && b.paycheckId && ` · from ${paycheckLabel(b.paycheckId)}`}
-                            </span>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </div>

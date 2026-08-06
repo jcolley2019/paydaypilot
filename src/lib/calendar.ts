@@ -2,7 +2,7 @@ import type { AmountType, Bill } from '@/types/bills'
 import type { IncomeSource, InstanceStatus } from '@/types/payday'
 import { generatePayDates, occurrencesForBill } from '@/lib/paydays'
 import { describeDueRule } from '@/lib/dueRules'
-import { addDays, toISODate } from '@/lib/localDate'
+import { addDays, parseISODate, toISODate } from '@/lib/localDate'
 
 export interface CalendarPaydayEntry {
   date: string
@@ -212,4 +212,47 @@ export function buildCalendarDays({
   }
 
   return map
+}
+
+export interface CalendarPaycheckLabel {
+  /** Join key for a payday entry: sourceId + date, stable across real/computed. */
+  key: string
+  paycheckId: string | null
+  sourceId: string
+  sourceName: string
+  date: string
+  real: boolean
+  amount: number
+  label: string
+}
+
+/**
+ * Assigns month-scoped "Check N" display labels to paydays whose date falls
+ * within the given calendar month, in date order across all income sources.
+ * Numbering resets each month — it is not a running count across the year.
+ */
+export function numberPaychecksInMonth(
+  paydays: CalendarPaydayEntry[],
+  year: number,
+  month0: number,
+): CalendarPaycheckLabel[] {
+  const inMonth = paydays.filter((p) => {
+    const d = parseISODate(p.date)
+    return d.getFullYear() === year && d.getMonth() === month0
+  })
+
+  const sorted = [...inMonth].sort(
+    (a, b) => a.date.localeCompare(b.date) || a.sourceName.localeCompare(b.sourceName),
+  )
+
+  return sorted.map((p, i) => ({
+    key: `${p.sourceId}|${p.date}`,
+    paycheckId: p.paycheckId,
+    sourceId: p.sourceId,
+    sourceName: p.sourceName,
+    date: p.date,
+    real: p.real,
+    amount: p.amount,
+    label: `Check ${i + 1}`,
+  }))
 }

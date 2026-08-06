@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { monthGridDates, buildCalendarDays } from './calendar'
+import { monthGridDates, buildCalendarDays, numberPaychecksInMonth } from './calendar'
 import { toISODate } from './localDate'
 import type { IncomeSource } from '@/types/payday'
 import type { Bill } from '@/types/bills'
@@ -218,5 +218,75 @@ describe('buildCalendarDays', () => {
       { sourceId: 'src-1', real: true },
       { sourceId: 'src-2', real: false },
     ])
+  })
+})
+
+describe('numberPaychecksInMonth', () => {
+  const from = new Date(2026, 6, 1) // Jul 1, 2026
+  const to = new Date(2026, 6, 31) // Jul 31, 2026
+
+  it('numbers a single biweekly source in date order', () => {
+    const days = buildCalendarDays({
+      incomeSources: [source({})], // anchor 2026-07-03 -> Jul 3, 17, 31
+      bills: [],
+      realPaychecks: [],
+      realInstances: [],
+      from,
+      to,
+    })
+    const paydays = [...days.values()].flatMap((d) => d.paydays)
+    const labels = numberPaychecksInMonth(paydays, 2026, 6)
+    expect(labels.map((l) => l.label)).toEqual(['Check 1', 'Check 2', 'Check 3'])
+    expect(labels.map((l) => l.date)).toEqual(['2026-07-03', '2026-07-17', '2026-07-31'])
+  })
+
+  it('interleaves two sources by date across the month', () => {
+    const days = buildCalendarDays({
+      incomeSources: [
+        source({}), // biweekly -> Jul 3, 17, 31
+        source({ id: 'src-2', name: 'Side gig', schedule: 'monthly', monthly_day: 10, anchor_date: null }),
+      ],
+      bills: [],
+      realPaychecks: [],
+      realInstances: [],
+      from,
+      to,
+    })
+    const paydays = [...days.values()].flatMap((d) => d.paydays)
+    const labels = numberPaychecksInMonth(paydays, 2026, 6)
+    expect(labels.map((l) => `${l.label}:${l.sourceId}:${l.date}`)).toEqual([
+      'Check 1:src-1:2026-07-03',
+      'Check 2:src-2:2026-07-10',
+      'Check 3:src-1:2026-07-17',
+      'Check 4:src-1:2026-07-31',
+    ])
+  })
+
+  it('returns an empty array for a month with zero paychecks', () => {
+    const days = buildCalendarDays({
+      incomeSources: [],
+      bills: [],
+      realPaychecks: [],
+      realInstances: [],
+      from,
+      to,
+    })
+    const paydays = [...days.values()].flatMap((d) => d.paydays)
+    expect(numberPaychecksInMonth(paydays, 2026, 6)).toEqual([])
+  })
+
+  it('excludes paydays outside the requested month even if present in the input list', () => {
+    const days = buildCalendarDays({
+      incomeSources: [source({})],
+      bills: [],
+      realPaychecks: [],
+      realInstances: [],
+      from: new Date(2026, 5, 1),
+      to: new Date(2026, 7, 31), // spans Jun, Jul, Aug
+    })
+    const paydays = [...days.values()].flatMap((d) => d.paydays)
+    const labels = numberPaychecksInMonth(paydays, 2026, 6) // July only
+    expect(labels.every((l) => l.date.startsWith('2026-07'))).toBe(true)
+    expect(labels.map((l) => l.label)).toEqual(['Check 1', 'Check 2', 'Check 3'])
   })
 })
