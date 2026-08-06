@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { CalendarMarker } from '@/components/dashboard/CalendarMarker'
 import { buildCalendarDays, monthGridDates } from '@/lib/calendar'
 import { toISODate } from '@/lib/localDate'
 import type { PaycheckWithSource, BillInstanceWithBill } from '@/hooks/usePaydayEngine'
@@ -106,8 +107,8 @@ export function YearCalendar({
                         iso === todayISO && inMonth && 'rounded-full ring-2 ring-primary',
                       )}
                     >
-                      {hasPayday && <span className="size-1 rounded-full bg-emerald-500" />}
-                      {hasBill && <span className="size-1 rounded-full bg-sky-500" />}
+                      {hasPayday && <CalendarMarker kind="payday" size="xs" />}
+                      {hasBill && <CalendarMarker kind="bill-due" size="xs" />}
                     </div>
                   )
                 })}
