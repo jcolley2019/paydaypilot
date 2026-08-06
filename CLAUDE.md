@@ -31,3 +31,9 @@ Path alias: "@" → "./src".
 ## Verification gates
 Every sprint ends with: npm run build passes with zero TS errors, plus the
 sprint-specific checks. Report results explicitly.
+
+## Known quirks
+- Supabase project is on the FREE joey-tools org and AUTO-PAUSES after ~1 week idle.
+  Symptom: login/auth fails with fetch/network errors (NOT "invalid credentials").
+  Fix: supabase.com dashboard → paydaypilot → Restore, wait 2–5 min. Do not debug
+  auth code for this symptom until pause is ruled out.
