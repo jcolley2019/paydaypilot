@@ -18,12 +18,13 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
-/** Fixed 4-hue palette cycling per check, so bill chips visually pair with their payday. */
+/** Fixed 4-hue palette cycling per check, so bill chips visually pair with their payday.
+ * Hues are theme tokens (--pp-check-N) so each bake-off variant supplies scheme-compatible values. */
 const CHECK_HUE_CLASSES = [
-  'border-l-violet-500',
-  'border-l-amber-500',
-  'border-l-teal-500',
-  'border-l-rose-500',
+  'border-l-pp-check-1',
+  'border-l-pp-check-2',
+  'border-l-pp-check-3',
+  'border-l-pp-check-4',
 ]
 const NO_CHECK_HUE_CLASS = 'border-l-transparent'
 
@@ -144,7 +145,7 @@ export function MonthCalendar({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold tracking-tight">
+        <h2 className="pp-display text-lg">
           {MONTH_NAMES[month0]} {year}
         </h2>
         <div className="flex items-center gap-1">
@@ -174,7 +175,7 @@ export function MonthCalendar({
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">
+      <div className="pp-label grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">
         {WEEKDAY_LABELS.map((label) => (
           <span key={label}>{label}</span>
         ))}
@@ -190,7 +191,7 @@ export function MonthCalendar({
           const tabIndex = index === activeIndex ? 0 : -1
 
           const buttonClassName = cn(
-            'flex min-h-16 flex-col items-start gap-1 rounded-md p-1.5 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:min-h-28',
+            'flex min-h-16 flex-col items-start gap-1 rounded-md border border-pp-grid-line p-1.5 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:min-h-32',
             inMonth ? 'text-foreground' : 'text-muted-foreground/50',
             hasContent ? 'hover:bg-accent/50' : 'cursor-default',
           )
@@ -200,7 +201,7 @@ export function MonthCalendar({
               <span
                 className={cn(
                   'flex size-5 items-center justify-center rounded-full text-xs font-medium',
-                  isToday && 'bg-primary text-primary-foreground',
+                  isToday && 'pp-today bg-pp-today text-pp-today-foreground',
                 )}
               >
                 {date.getDate()}
@@ -237,7 +238,7 @@ export function MonthCalendar({
                           key={`p-${i}`}
                           title={text}
                           className={cn(
-                            'truncate rounded-sm border-l-2 bg-primary/10 px-1 py-0.5 text-[10px] font-medium leading-tight',
+                            'pp-chip pp-label truncate rounded-sm border-l-2 bg-primary/10 px-1 py-0.5 text-[10px] font-medium leading-tight',
                             hueClassFor(check),
                             !p.real && 'opacity-40',
                           )}
@@ -253,7 +254,7 @@ export function MonthCalendar({
                           key={`b-${i}`}
                           title={b.billName}
                           className={cn(
-                            'truncate rounded-sm border-l-2 bg-accent/40 px-1 py-0.5 text-[10px] leading-tight',
+                            'pp-chip truncate rounded-sm border-l-2 bg-accent/40 px-1 py-0.5 text-[10px] leading-tight',
                             hueClassFor(check),
                             !b.real && 'opacity-40',
                             b.status === 'paid' && 'text-muted-foreground line-through',
@@ -311,7 +312,7 @@ export function MonthCalendar({
 
                     {day.paydays.length > 0 && (
                       <div className="flex flex-col gap-1.5">
-                        <span className="text-xs font-medium text-muted-foreground">Paydays</span>
+                        <span className="pp-label text-xs font-medium text-muted-foreground">Paydays</span>
                         {day.paydays.map((p, i) => {
                           const check = checkForPayday(p)
                           return (
@@ -320,7 +321,7 @@ export function MonthCalendar({
                                 {check ? `${check.label} · ${p.sourceName}` : p.sourceName}
                                 {!p.real && ' · projected'}
                               </span>
-                              <span>{formatAmount(p.amount, 'fixed')}</span>
+                              <span className="pp-money">{formatAmount(p.amount, 'fixed')}</span>
                             </div>
                           )
                         })}
@@ -329,7 +330,7 @@ export function MonthCalendar({
 
                     {day.bills.length > 0 && (
                       <div className="flex flex-col gap-1.5">
-                        <span className="text-xs font-medium text-muted-foreground">Bills</span>
+                        <span className="pp-label text-xs font-medium text-muted-foreground">Bills</span>
                         {day.bills.map((b, i) => {
                           const check = checkForBill(b)
                           return (
@@ -343,7 +344,7 @@ export function MonthCalendar({
                                 >
                                   {b.billName}
                                 </span>
-                                <span>{formatAmount(b.amount, b.amountType)}</span>
+                                <span className="pp-money">{formatAmount(b.amount, b.amountType)}</span>
                               </div>
                               <span className="text-xs text-muted-foreground">
                                 {b.dueRuleLabel}

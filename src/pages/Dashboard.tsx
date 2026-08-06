@@ -70,8 +70,8 @@ export function Dashboard() {
 
   if (!incomeLoading && incomeSources.length === 0) {
     return (
-      <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+      <div className="flex flex-col gap-(--pp-page-gap)">
+        <h1 className="pp-display text-2xl">Dashboard</h1>
         <Card>
           <CardHeader>
             <CardTitle>Add your income to see your paycheck plan</CardTitle>
@@ -90,9 +90,9 @@ export function Dashboard() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-(--pp-page-gap)">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <h1 className="pp-display pp-underline text-2xl">Dashboard</h1>
         <p className="text-sm text-muted-foreground">Your payday plan</p>
       </div>
 

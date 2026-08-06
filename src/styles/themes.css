@@ -1,0 +1,130 @@
+/*
+ * PP.DS.2 — theme token system: dark (default) + Paper (light).
+ *
+ * The default (no data-theme attribute, html.dark) resolves every pp-* hook class
+ * to the app's dark appearance. Paper is applied by setting data-theme="paper" on
+ * <html> and removing the .dark class. Rules here are deliberately unlayered so
+ * they win over Tailwind utilities.
+ */
+
+/* ---------- default token values (must equal current shipped appearance) ---------- */
+
+:root {
+    --pp-font-heading: 'Geist Variable', sans-serif;
+    --pp-payday: oklch(0.696 0.17 162.48);      /* emerald-500 */
+    --pp-bill: oklch(0.685 0.169 237.32);       /* sky-500 */
+    --pp-check-1: oklch(0.606 0.25 292.72);     /* violet-500 */
+    --pp-check-2: oklch(0.769 0.188 70.08);     /* amber-500 */
+    --pp-check-3: oklch(0.704 0.14 182.5);      /* teal-500 */
+    --pp-check-4: oklch(0.645 0.246 16.44);     /* rose-500 */
+    --pp-today: var(--primary);
+    --pp-today-foreground: var(--primary-foreground);
+    --pp-page-gap: 1.5rem;
+    --pp-grid-line: oklch(1 0 0 / 16%);         /* white, visible but not glaring */
+}
+
+/* ---------- var-driven hook classes (defaults reproduce current styling) ---------- */
+
+.pp-display {
+    font-family: var(--pp-font-display, var(--font-sans));
+    font-weight: var(--pp-display-weight, 600);
+    letter-spacing: var(--pp-display-tracking, -0.025em);
+}
+
+.pp-label {
+    font-family: var(--pp-font-label, inherit);
+    text-transform: var(--pp-label-transform, none);
+    letter-spacing: var(--pp-label-tracking, inherit);
+}
+
+.pp-money {
+    font-family: var(--pp-font-money, inherit);
+    font-variant-numeric: var(--pp-money-numeric, normal);
+}
+
+.pp-underline {
+    position: relative;
+    padding-bottom: var(--pp-underline-pad, 0px);
+}
+.pp-underline::after {
+    content: '';
+    display: var(--pp-underline-display, none);
+    position: absolute;
+    left: 1px;
+    bottom: 0.15rem;
+    width: 3.25rem;
+    height: 3px;
+    background: var(--pp-underline-color, var(--primary));
+    border-radius: 3px 7px 4px 6px; /* irregular corners for the hand-drawn read */
+    transform: rotate(var(--pp-underline-tilt, -0.6deg));
+}
+
+/* ---------- Paper — the sole light theme ---------- */
+
+:root[data-theme='paper'] {
+    color-scheme: light;
+
+    --background: oklch(0.973 0.013 92);        /* cream #faf6ee family */
+    --foreground: oklch(0.205 0.01 80);         /* near-black ink #1a1712 family */
+    --card: oklch(0.992 0.008 95);
+    --card-foreground: oklch(0.205 0.01 80);
+    --popover: oklch(0.992 0.008 95);
+    --popover-foreground: oklch(0.205 0.01 80);
+    --primary: oklch(0.553 0.195 38);           /* burnt orange #c2410c family */
+    --primary-foreground: oklch(0.985 0.01 92);
+    --secondary: oklch(0.94 0.02 90);
+    --secondary-foreground: oklch(0.205 0.01 80);
+    --muted: oklch(0.94 0.02 90);
+    --muted-foreground: oklch(0.45 0.02 75);
+    --accent: oklch(0.94 0.025 85);
+    --accent-foreground: oklch(0.205 0.01 80);
+    --destructive: oklch(0.54 0.17 30);         /* overdue red, muted-warm */
+    --border: oklch(0.205 0.01 80 / 15%);       /* ink outlines, not gray */
+    --input: oklch(0.205 0.01 80 / 20%);
+    --ring: oklch(0.553 0.195 38 / 60%);
+
+    --pp-payday: oklch(0.56 0.11 145);          /* payday green, muted-warm */
+    --pp-bill: oklch(0.52 0.06 255);            /* bill-due marker: dusty slate */
+    --pp-check-1: oklch(0.62 0.13 55);          /* terracotta */
+    --pp-check-2: oklch(0.6 0.11 130);          /* olive */
+    --pp-check-3: oklch(0.6 0.09 200);          /* dusty teal */
+    --pp-check-4: oklch(0.55 0.12 340);         /* plum */
+    --pp-grid-line: oklch(0.205 0.01 80 / 18%); /* ink, same weight class as dark's white lines */
+
+    --pp-note-bg: oklch(0.93 0.075 95);         /* sticky-note yellow (advisor only) */
+    --pp-note-border: oklch(0.82 0.09 95);
+
+    --pp-font-display: 'Fraunces Variable', Georgia, 'Times New Roman', serif;
+    --pp-font-heading: 'Geist Variable', sans-serif;
+    --pp-font-label: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+    --pp-font-money: 'Fraunces Variable', Georgia, serif;
+
+    --pp-ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+    --radius: 0.625rem;
+    --pp-display-weight: 620;
+    --pp-label-transform: uppercase;
+    --pp-label-tracking: 0.07em;
+    --pp-underline-display: block;
+    --pp-underline-pad: 0.55rem;
+}
+
+/* Apple physics: weighted, settling transitions in Paper. */
+:root[data-theme='paper'] [data-slot='popover-content'] {
+    animation-duration: 320ms;
+    animation-timing-function: var(--pp-ease);
+}
+:root[data-theme='paper'] [data-slot='tabs-trigger'] {
+    transition-duration: 240ms;
+    transition-timing-function: var(--pp-ease);
+}
+:root[data-theme='paper'] button {
+    transition-timing-function: var(--pp-ease);
+}
+
+:root[data-theme='paper'] .pp-status-strip {
+    background: var(--pp-note-bg);
+    border-color: var(--pp-note-border);
+    box-shadow: 1px 2px 0 0 oklch(0.205 0.01 80 / 12%);
+    transform: rotate(-0.4deg);
+}

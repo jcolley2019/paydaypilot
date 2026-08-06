@@ -2,12 +2,25 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/fraunces";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "./styles/themes.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-heading: var(--font-sans);
+    --font-heading: var(--pp-font-heading);
     --font-sans: 'Geist Variable', sans-serif;
+    --color-pp-payday: var(--pp-payday);
+    --color-pp-bill: var(--pp-bill);
+    --color-pp-today: var(--pp-today);
+    --color-pp-today-foreground: var(--pp-today-foreground);
+    --color-pp-check-1: var(--pp-check-1);
+    --color-pp-check-2: var(--pp-check-2);
+    --color-pp-check-3: var(--pp-check-3);
+    --color-pp-check-4: var(--pp-check-4);
+    --color-pp-grid-line: var(--pp-grid-line);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PaydayPilot</title>
+    <script>
+      (function () {
+        try {
+          if (localStorage.getItem('pp-theme') === 'paper') {
+            document.documentElement.classList.remove('dark')
+            document.documentElement.setAttribute('data-theme', 'paper')
+          }
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
