@@ -110,10 +110,15 @@ export function CreditAccountCard({ bill, onEdit }: CreditAccountCardProps) {
 
         {payoff && (
           <div className="text-sm">
-            {payoff.neverPaysOff ? (
+            {payoff.kind === 'never_pays_off' ? (
               <p className="font-medium text-destructive">
                 At the {formatAmount(minPayment!, 'fixed')} minimum, this never pays off — the
                 payment doesn't cover the interest.
+              </p>
+            ) : payoff.kind === 'exceeds_horizon' ? (
+              <p className="font-medium text-amber-500">
+                At the {formatAmount(minPayment!, 'fixed')} minimum, this takes 100+ years to pay
+                off — barely above the interest.
               </p>
             ) : (
               <p>

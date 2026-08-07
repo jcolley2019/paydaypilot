@@ -1,14 +1,20 @@
-const MAX_AMORTIZATION_MONTHS = 1200 // 100 years — anything beyond this is effectively "never"
+const MAX_AMORTIZATION_MONTHS = 1200 // 100 years — beyond this we stop computing an exact payoff
+
+/**
+ * 'never_pays_off': payment doesn't outpace interest, balance grows forever.
+ * 'exceeds_horizon': payment does outpace interest, but payoff takes more than 100 years.
+ */
+export type PayoffOutcome = 'paid_off' | 'never_pays_off' | 'exceeds_horizon'
 
 export interface PayoffResult {
-  neverPaysOff: boolean
+  kind: PayoffOutcome
   months: number | null
   totalInterest: number | null
 }
 
 /** Standard fixed-payment amortization. Detects payments that don't outpace interest. */
 export function payoffMonths(balance: number, apr: number, payment: number): PayoffResult {
-  if (balance <= 0) return { neverPaysOff: false, months: 0, totalInterest: 0 }
+  if (balance <= 0) return { kind: 'paid_off', months: 0, totalInterest: 0 }
 
   const monthlyRate = apr / 100 / 12
   let remaining = balance
@@ -18,10 +24,10 @@ export function payoffMonths(balance: number, apr: number, payment: number): Pay
   while (remaining > 0) {
     const interest = remaining * monthlyRate
     if (payment <= interest) {
-      return { neverPaysOff: true, months: null, totalInterest: null }
+      return { kind: 'never_pays_off', months: null, totalInterest: null }
     }
     if (months >= MAX_AMORTIZATION_MONTHS) {
-      return { neverPaysOff: true, months: null, totalInterest: null }
+      return { kind: 'exceeds_horizon', months: null, totalInterest: null }
     }
     const principal = Math.min(payment - interest, remaining)
     remaining -= principal
@@ -29,7 +35,7 @@ export function payoffMonths(balance: number, apr: number, payment: number): Pay
     months += 1
   }
 
-  return { neverPaysOff: false, months, totalInterest: Math.round(totalInterest * 100) / 100 }
+  return { kind: 'paid_off', months, totalInterest: Math.round(totalInterest * 100) / 100 }
 }
 
 /** Card-style declining minimum: each month's payment is the greater of a flat floor or a % of the current balance. */
@@ -39,7 +45,7 @@ export function minimumPaymentSchedule(
   minPercent: number,
   minFloor: number,
 ): PayoffResult {
-  if (balance <= 0) return { neverPaysOff: false, months: 0, totalInterest: 0 }
+  if (balance <= 0) return { kind: 'paid_off', months: 0, totalInterest: 0 }
 
   const monthlyRate = apr / 100 / 12
   let remaining = balance
@@ -50,10 +56,10 @@ export function minimumPaymentSchedule(
     const interest = remaining * monthlyRate
     const payment = Math.max(minFloor, remaining * (minPercent / 100))
     if (payment <= interest) {
-      return { neverPaysOff: true, months: null, totalInterest: null }
+      return { kind: 'never_pays_off', months: null, totalInterest: null }
     }
     if (months >= MAX_AMORTIZATION_MONTHS) {
-      return { neverPaysOff: true, months: null, totalInterest: null }
+      return { kind: 'exceeds_horizon', months: null, totalInterest: null }
     }
     const principal = Math.min(payment - interest, remaining)
     remaining -= principal
@@ -61,7 +67,7 @@ export function minimumPaymentSchedule(
     months += 1
   }
 
-  return { neverPaysOff: false, months, totalInterest: Math.round(totalInterest * 100) / 100 }
+  return { kind: 'paid_off', months, totalInterest: Math.round(totalInterest * 100) / 100 }
 }
 
 export interface WhatIfResult {
@@ -81,10 +87,10 @@ export function whatIfPayment(
   const base = payoffMonths(balance, apr, basePayment)
   const withExtra = payoffMonths(balance, apr, basePayment + extraPayment)
 
-  if (base.neverPaysOff || withExtra.neverPaysOff) {
+  if (base.kind !== 'paid_off' || withExtra.kind !== 'paid_off') {
     return {
-      baseNeverPaysOff: base.neverPaysOff,
-      newNeverPaysOff: withExtra.neverPaysOff,
+      baseNeverPaysOff: base.kind !== 'paid_off',
+      newNeverPaysOff: withExtra.kind !== 'paid_off',
       monthsSaved: null,
       interestSaved: null,
     }
@@ -109,8 +115,8 @@ export function utilizationTargets(balance: number, limit: number): UtilizationT
   if (limit <= 0) return null
 
   const currentPercent = Math.round((balance / limit) * 10000) / 100
-  const dollarsTo30 = Math.max(0, Math.round((balance - limit * 0.3) * 100) / 100)
-  const dollarsTo10 = Math.max(0, Math.round((balance - limit * 0.1) * 100) / 100)
+  const dollarsTo30 = Math.max(0, Math.ceil((balance - limit * 0.3) * 100) / 100)
+  const dollarsTo10 = Math.max(0, Math.ceil((balance - limit * 0.1) * 100) / 100)
 
   return { currentPercent, dollarsTo30, dollarsTo10 }
 }
