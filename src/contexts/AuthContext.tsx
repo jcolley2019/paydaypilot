@@ -24,6 +24,13 @@ interface AuthContextValue {
   profile: Profile | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
+  signUp: (
+    email: string,
+    password: string,
+  ) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>
+  signInWithGoogle: () => Promise<{ error: string | null }>
+  resetPasswordForEmail: (email: string) => Promise<{ error: string | null }>
+  updatePassword: (password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
   updateProfile: (updates: Partial<Omit<Profile, 'id'>>) => Promise<void>
@@ -37,12 +44,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   async function fetchProfile(userId: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
+      .maybeSingle()
+
+    if (error) {
+      toast.error(`Failed to load profile: ${error.message}`)
+      setProfile(null)
+      return
+    }
+
+    if (data) {
+      setProfile(data)
+      return
+    }
+
+    // No profile row yet — first login for this user (e.g. fresh Google sign-up).
+    const { data: created, error: insertError } = await supabase
+      .from('profiles')
+      .insert({ id: userId, onboarded: false })
+      .select('*')
       .single()
-    setProfile(data ?? null)
+
+    if (insertError) {
+      toast.error(`Failed to set up profile: ${insertError.message}`)
+      setProfile(null)
+      return
+    }
+
+    setProfile(created)
   }
 
   useEffect(() => {
@@ -82,6 +114,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null }
   }
 
+  async function signUp(email: string, password: string) {
+    const { data, error } = await supabase.auth.signUp({ email, password })
+    if (error) return { error: error.message, needsEmailConfirmation: false }
+    return { error: null, needsEmailConfirmation: !data.session }
+  }
+
+  async function signInWithGoogle() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    })
+    return { error: error?.message ?? null }
+  }
+
+  async function resetPasswordForEmail(email: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    return { error: error?.message ?? null }
+  }
+
+  async function updatePassword(password: string) {
+    const { error } = await supabase.auth.updateUser({ password })
+    return { error: error?.message ?? null }
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
   }
@@ -113,6 +171,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         loading,
         signIn,
+        signUp,
+        signInWithGoogle,
+        resetPasswordForEmail,
+        updatePassword,
         signOut,
         refreshProfile,
         updateProfile,

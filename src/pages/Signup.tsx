@@ -1,0 +1,155 @@
+import { useState, type FormEvent } from 'react'
+import { Link, Navigate, useLocation } from 'react-router-dom'
+import { Compass, MailCheck } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
+import { GoogleButton } from '@/components/auth/GoogleButton'
+
+export function Signup() {
+  const { session, loading, signUp } = useAuth()
+  const location = useLocation()
+
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [checkEmail, setCheckEmail] = useState(false)
+
+  if (!loading && session) {
+    const from = (location.state as { from?: string } | null)?.from ?? '/'
+    return <Navigate to={from} replace />
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    setSubmitting(true)
+    const { error, needsEmailConfirmation } = await signUp(email, password)
+    setSubmitting(false)
+    if (error) {
+      setError(error)
+      return
+    }
+    if (needsEmailConfirmation) {
+      setCheckEmail(true)
+      return
+    }
+    // Session created immediately — AuthProvider's listener picks it up and
+    // ProtectedRoute will route to onboarding once the profile row exists.
+  }
+
+  return (
+    <div className="flex min-h-svh items-center justify-center bg-background p-4 text-foreground">
+      <div className="flex w-full max-w-sm flex-col items-center gap-6">
+        <div className="flex flex-col items-center gap-2">
+          <Compass className="size-8 text-primary" />
+          <span className="text-xl font-semibold tracking-tight">PaydayPilot</span>
+        </div>
+
+        <Card className="w-full">
+          {checkEmail ? (
+            <CardContent className="flex flex-col items-center gap-3 py-4 text-center">
+              <MailCheck className="size-8 text-primary" />
+              <CardTitle>Check your email</CardTitle>
+              <CardDescription>
+                We sent a confirmation link to <span className="font-medium">{email}</span>.
+                Click it to activate your account, then sign in.
+              </CardDescription>
+              <Button asChild className="mt-2 w-full">
+                <Link to="/login">Back to sign in</Link>
+              </Button>
+            </CardContent>
+          ) : (
+            <>
+              <CardHeader>
+                <CardTitle>Create your account</CardTitle>
+                <CardDescription>Start mapping your bills to your paychecks.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <GoogleButton />
+
+                <div className="flex items-center gap-3">
+                  <Separator className="flex-1" />
+                  <span className="text-xs text-muted-foreground">or</span>
+                  <Separator className="flex-1" />
+                </div>
+
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="email" className="text-sm font-medium">
+                      Email
+                    </label>
+                    <Input
+                      id="email"
+                      type="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      disabled={submitting}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="password" className="text-sm font-medium">
+                      Password
+                    </label>
+                    <Input
+                      id="password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      disabled={submitting}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="confirm-password" className="text-sm font-medium">
+                      Confirm password
+                    </label>
+                    <Input
+                      id="confirm-password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      disabled={submitting}
+                    />
+                  </div>
+
+                  {error && <p className="text-sm text-destructive">{error}</p>}
+
+                  <Button type="submit" disabled={submitting} className="mt-2 w-full">
+                    {submitting ? 'Creating account…' : 'Sign up'}
+                  </Button>
+                </form>
+
+                <p className="text-center text-sm text-muted-foreground">
+                  Already have an account?{' '}
+                  <Link to="/login" className="font-medium text-primary hover:underline">
+                    Sign in
+                  </Link>
+                </p>
+              </CardContent>
+            </>
+          )}
+        </Card>
+      </div>
+    </div>
+  )
+}

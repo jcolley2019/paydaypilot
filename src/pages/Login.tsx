@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Compass } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
+import { GoogleButton } from '@/components/auth/GoogleButton'
 
 export function Login() {
   const { session, loading, signIn } = useAuth()
@@ -47,7 +49,15 @@ export function Login() {
             <CardTitle>Sign in</CardTitle>
             <CardDescription>Enter your credentials to continue.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col gap-4">
+            <GoogleButton />
+
+            <div className="flex items-center gap-3">
+              <Separator className="flex-1" />
+              <span className="text-xs text-muted-foreground">or</span>
+              <Separator className="flex-1" />
+            </div>
+
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="email" className="text-sm font-medium">
@@ -65,9 +75,17 @@ export function Login() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="password" className="text-sm font-medium">
-                  Password
-                </label>
+                <div className="flex items-center justify-between">
+                  <label htmlFor="password" className="text-sm font-medium">
+                    Password
+                  </label>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
                 <Input
                   id="password"
                   type="password"
@@ -85,6 +103,13 @@ export function Login() {
                 {submitting ? 'Signing in…' : 'Sign in'}
               </Button>
             </form>
+
+            <p className="text-center text-sm text-muted-foreground">
+              Don't have an account?{' '}
+              <Link to="/signup" className="font-medium text-primary hover:underline">
+                Sign up
+              </Link>
+            </p>
           </CardContent>
         </Card>
       </div>
