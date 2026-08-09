@@ -23,6 +23,7 @@ interface AuthContextValue {
   user: User | null
   profile: Profile | null
   loading: boolean
+  profileError: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signUp: (
     email: string,
@@ -41,40 +42,40 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [profileError, setProfileError] = useState(false)
   const [loading, setLoading] = useState(true)
 
   async function fetchProfile(userId: string) {
+    // Upsert with ignoreDuplicates: concurrent callers (initial getSession +
+    // onAuthStateChange, both firing on sign-in) converge on one row instead
+    // of racing a check-then-insert and hitting a duplicate-key error. This
+    // never touches an existing row's fields — insert-only on conflict.
+    const { error: upsertError } = await supabase
+      .from('profiles')
+      .upsert({ id: userId, onboarded: false }, { onConflict: 'id', ignoreDuplicates: true })
+
+    if (upsertError) {
+      toast.error(`Failed to set up profile: ${upsertError.message}`)
+      setProfileError(true)
+      return
+    }
+
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .maybeSingle()
 
-    if (error) {
-      toast.error(`Failed to load profile: ${error.message}`)
-      setProfile(null)
+    if (error || !data) {
+      toast.error(`Failed to load profile: ${error?.message ?? 'profile not found'}`)
+      setProfileError(true)
       return
     }
 
-    if (data) {
-      setProfile(data)
-      return
-    }
-
-    // No profile row yet — first login for this user (e.g. fresh Google sign-up).
-    const { data: created, error: insertError } = await supabase
-      .from('profiles')
-      .insert({ id: userId, onboarded: false })
-      .select('*')
-      .single()
-
-    if (insertError) {
-      toast.error(`Failed to set up profile: ${insertError.message}`)
-      setProfile(null)
-      return
-    }
-
-    setProfile(created)
+    // Only set state on success — a failed fetch must never clobber a
+    // previously-loaded profile with null.
+    setProfile(data)
+    setProfileError(false)
   }
 
   useEffect(() => {
@@ -100,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         fetchProfile(session.user.id)
       } else {
         setProfile(null)
+        setProfileError(false)
       }
     })
 
@@ -170,6 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: session?.user ?? null,
         profile,
         loading,
+        profileError,
         signIn,
         signUp,
         signInWithGoogle,

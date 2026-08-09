@@ -21,7 +21,8 @@ export function ForgotPassword() {
     const { error } = await resetPasswordForEmail(email)
     setSubmitting(false)
     if (error) {
-      setError(error)
+      console.error('resetPasswordForEmail failed:', error)
+      setError('Something went wrong sending the reset link. Please try again.')
       return
     }
     setSent(true)

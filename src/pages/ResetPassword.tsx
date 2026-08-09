@@ -1,20 +1,46 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Compass, CircleCheck } from 'lucide-react'
+import { Compass, CircleCheck, TriangleAlert } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+
+const RECOVERY_DETECT_TIMEOUT_MS = 3000
 
 export function ResetPassword() {
   const { updatePassword } = useAuth()
   const navigate = useNavigate()
 
+  // null = still checking whether this page load came from a recovery link;
+  // true = confirmed via the PASSWORD_RECOVERY auth event; false = timed out
+  // without one, meaning the link is missing, invalid, or already used.
+  const [isRecovery, setIsRecovery] = useState<boolean | null>(null)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
+
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecovery(true)
+      }
+    })
+
+    const timeout = window.setTimeout(() => {
+      setIsRecovery((current) => current ?? false)
+    }, RECOVERY_DETECT_TIMEOUT_MS)
+
+    return () => {
+      subscription.unsubscribe()
+      window.clearTimeout(timeout)
+    }
+  }, [])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -56,6 +82,21 @@ export function ResetPassword() {
               <Button className="mt-2 w-full" onClick={() => navigate('/', { replace: true })}>
                 Continue
               </Button>
+            </CardContent>
+          ) : isRecovery === false ? (
+            <CardContent className="flex flex-col items-center gap-3 py-4 text-center">
+              <TriangleAlert className="size-8 text-destructive" />
+              <CardTitle>Invalid reset link</CardTitle>
+              <CardDescription>
+                This reset link is invalid or expired — request a new one.
+              </CardDescription>
+              <Button asChild className="mt-2 w-full">
+                <Link to="/forgot-password">Request a new link</Link>
+              </Button>
+            </CardContent>
+          ) : isRecovery === null ? (
+            <CardContent className="flex flex-col items-center gap-3 py-4 text-center">
+              <CardDescription>Verifying your reset link…</CardDescription>
             </CardContent>
           ) : (
             <>
