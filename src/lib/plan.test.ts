@@ -44,6 +44,8 @@ function bill(overrides: Partial<Bill>): Bill {
     debt_min_payment: null,
     account_type: null,
     credit_limit: null,
+    min_payment_percent: null,
+    min_payment_floor: null,
     csp_bucket: 'fixed',
     active: true,
     notes: null,

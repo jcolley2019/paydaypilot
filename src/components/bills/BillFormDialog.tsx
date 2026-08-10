@@ -46,6 +46,8 @@ interface FormState {
   debtMinPayment: string
   accountType: AccountType | ''
   creditLimit: string
+  minPaymentPercent: string
+  minPaymentFloor: string
   active: boolean
 }
 
@@ -82,6 +84,8 @@ function emptyForm(): FormState {
     debtMinPayment: '',
     accountType: '',
     creditLimit: '',
+    minPaymentPercent: '',
+    minPaymentFloor: '',
     active: true,
   }
 }
@@ -102,6 +106,8 @@ function formFromBill(bill: Bill): FormState {
   base.debtMinPayment = bill.debt_min_payment != null ? String(bill.debt_min_payment) : ''
   base.accountType = bill.account_type ?? ''
   base.creditLimit = bill.credit_limit != null ? String(bill.credit_limit) : ''
+  base.minPaymentPercent = bill.min_payment_percent != null ? String(bill.min_payment_percent) : ''
+  base.minPaymentFloor = bill.min_payment_floor != null ? String(bill.min_payment_floor) : ''
   base.active = bill.active
 
   base.ruleType = bill.due_rule.type
@@ -173,6 +179,14 @@ export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormD
         credit_limit:
           form.isDebt && form.accountType === 'card' && form.creditLimit
             ? Number(form.creditLimit)
+            : null,
+        min_payment_percent:
+          form.isDebt && form.accountType === 'card' && form.minPaymentPercent
+            ? Number(form.minPaymentPercent)
+            : null,
+        min_payment_floor:
+          form.isDebt && form.accountType === 'card' && form.minPaymentFloor
+            ? Number(form.minPaymentFloor)
             : null,
         csp_bucket: form.cspBucket,
         active: form.active,
@@ -450,6 +464,39 @@ export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormD
                   </div>
                 )}
               </div>
+
+              {form.accountType === 'card' && (
+                <div className="flex flex-col gap-2 rounded-lg border border-input p-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="debt-min-percent">Minimum payment %</Label>
+                      <Input
+                        id="debt-min-percent"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={form.minPaymentPercent}
+                        onChange={(e) => update('minPaymentPercent', e.target.value)}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="debt-min-floor">Minimum floor $</Label>
+                      <Input
+                        id="debt-min-floor"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={form.minPaymentFloor}
+                        onChange={(e) => update('minPaymentFloor', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    From your statement, e.g. 2% or $25, whichever is greater — leave blank to use
+                    the fixed minimum payment above.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

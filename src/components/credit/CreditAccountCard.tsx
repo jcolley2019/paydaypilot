@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { formatAmount } from '@/lib/billLabels'
 import {
   payoffMonths,
+  minimumPaymentSchedule,
   whatIfPayment,
   utilizationTargets,
   interestPrincipalSplit,
@@ -34,17 +35,29 @@ export function CreditAccountCard({ bill, onEdit }: CreditAccountCardProps) {
   const balance = bill.debt_balance
   const apr = bill.debt_apr
   const minPayment = bill.debt_min_payment
+  const minPercent = bill.min_payment_percent
+  const minFloor = bill.min_payment_floor
   const [whatIfInput, setWhatIfInput] = useState('')
 
   const hasMathInputs = balance != null && apr != null && minPayment != null && balance > 0
+  const hasDecliningMinimum =
+    bill.account_type === 'card' && minPercent != null && minFloor != null
 
   const utilization =
     bill.account_type === 'card' && balance != null && bill.credit_limit != null
       ? utilizationTargets(balance, bill.credit_limit)
       : null
 
-  const payoff = hasMathInputs ? payoffMonths(balance, apr, minPayment) : null
+  const payoff = hasMathInputs
+    ? hasDecliningMinimum
+      ? minimumPaymentSchedule(balance, apr, minPercent!, minFloor!)
+      : payoffMonths(balance, apr, minPayment)
+    : null
   const split = hasMathInputs ? interestPrincipalSplit(balance, apr, minPayment) : null
+
+  const minimumDescriptor = hasDecliningMinimum
+    ? `declining minimums (${minPercent}% of balance or ${formatAmount(minFloor!, 'fixed')}, whichever is greater)`
+    : `the ${formatAmount(minPayment ?? 0, 'fixed')} minimum`
 
   const whatIfValue = Number(whatIfInput)
   const whatIf =
@@ -112,17 +125,17 @@ export function CreditAccountCard({ bill, onEdit }: CreditAccountCardProps) {
           <div className="text-sm">
             {payoff.kind === 'never_pays_off' ? (
               <p className="font-medium text-destructive">
-                At the {formatAmount(minPayment!, 'fixed')} minimum, this never pays off — the
-                payment doesn't cover the interest.
+                At {minimumDescriptor}, this never pays off — the payment doesn't cover the
+                interest.
               </p>
             ) : payoff.kind === 'exceeds_horizon' ? (
               <p className="font-medium text-amber-500">
-                At the {formatAmount(minPayment!, 'fixed')} minimum, this takes 100+ years to pay
-                off — barely above the interest.
+                At {minimumDescriptor}, this takes 100+ years to pay off — barely above the
+                interest.
               </p>
             ) : (
               <p>
-                Paying the {formatAmount(minPayment!, 'fixed')} minimum:{' '}
+                Paying {minimumDescriptor}:{' '}
                 <span className="font-medium">{monthsLabel(payoff.months!)}</span> to pay off,{' '}
                 <span className="font-medium">{formatAmount(payoff.totalInterest!, 'fixed')}</span>{' '}
                 total interest.
@@ -133,8 +146,9 @@ export function CreditAccountCard({ bill, onEdit }: CreditAccountCardProps) {
 
         {split && (
           <p className="text-xs text-muted-foreground">
-            This month at the minimum: {formatAmount(split.interest, 'fixed')} interest,{' '}
-            {formatAmount(split.principal, 'fixed')} principal.
+            This month at the {hasDecliningMinimum ? 'fixed ' : ''}minimum:{' '}
+            {formatAmount(split.interest, 'fixed')} interest, {formatAmount(split.principal, 'fixed')}{' '}
+            principal.
           </p>
         )}
 
@@ -143,6 +157,12 @@ export function CreditAccountCard({ bill, onEdit }: CreditAccountCardProps) {
             <Label htmlFor={`what-if-${bill.id}`} className="font-normal">
               What if I paid this much instead?
             </Label>
+            {hasDecliningMinimum && (
+              <p className="text-xs text-muted-foreground">
+                Compares against a fixed {formatAmount(minPayment!, 'fixed')}/mo — not the
+                declining schedule above.
+              </p>
+            )}
             <Input
               id={`what-if-${bill.id}`}
               type="number"

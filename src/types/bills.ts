@@ -55,6 +55,8 @@ export interface Bill {
   debt_min_payment: number | null
   account_type: AccountType | null
   credit_limit: number | null
+  min_payment_percent: number | null
+  min_payment_floor: number | null
   csp_bucket: CspBucket
   active: boolean
   notes: string | null
