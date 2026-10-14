@@ -2,7 +2,8 @@
 // POST { files: [{ name, mime, data /* base64 */ }], existing: [{ name, amount }] }
 //   -> { candidates: Candidate[] } — candidate recurring bills shaped for the `bills` table.
 // Auth: the caller's Supabase user JWT; never the service role key.
-// Secrets: ANTHROPIC_API_KEY (required), ANTHROPIC_MODEL (optional override).
+// Secrets: ANTHROPIC_API_KEY (required), ALLOWED_SCAN_EMAILS (required, comma-separated
+// allowlist; anyone else gets 403), ANTHROPIC_MODEL (optional override).
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const CORS_HEADERS = {
@@ -330,6 +331,14 @@ Deno.serve(async (req) => {
       data: { user },
     } = await supabase.auth.getUser(jwt)
     if (!user) return fail(401, 'Not signed in')
+
+    // Signups are open, so only allowlisted accounts may spend the Anthropic key. Fails closed.
+    const allowedEmails = (Deno.env.get('ALLOWED_SCAN_EMAILS') ?? '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean)
+    const email = user.email?.trim().toLowerCase()
+    if (!email || !allowedEmails.includes(email)) return fail(403, "Bill scanning isn't enabled for this account")
 
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
     if (!apiKey) return fail(500, 'ANTHROPIC_API_KEY not set')

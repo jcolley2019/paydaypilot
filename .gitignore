@@ -25,3 +25,7 @@ dist-ssr
 
 # Local claude-mem dump
 AGENTS.md
+
+# Supabase CLI: Edge Function secrets (pushed with supabase secrets set) + local cache
+supabase/functions/.env
+supabase/.temp/
