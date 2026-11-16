@@ -1,6 +1,5 @@
 import type { DueRule } from '@/types/bills'
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000
+import { addDays, calendarDaysBetween } from '@/lib/localDate'
 
 function dateOnly(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
@@ -46,10 +45,10 @@ export function nextDueDate(rule: DueRule, from: Date): Date | null {
     case 'interval_weeks': {
       const anchor = parseISODate(rule.anchor)
       const intervalDays = rule.weeks * 7
-      const diffDays = Math.round((fromDate.getTime() - anchor.getTime()) / MS_PER_DAY)
+      const diffDays = calendarDaysBetween(anchor, fromDate)
       if (diffDays <= 0) return anchor
       const k = Math.ceil(diffDays / intervalDays)
-      return new Date(anchor.getTime() + k * intervalDays * MS_PER_DAY)
+      return addDays(anchor, k * intervalDays)
     }
 
     case 'one_off': {

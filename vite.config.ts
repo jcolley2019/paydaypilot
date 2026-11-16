@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import path from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -50,5 +51,9 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+  },
+  test: {
+    // Date logic is tested in a zone that observes DST, whatever the machine's own zone is.
+    env: { TZ: 'America/Denver' },
   },
 })

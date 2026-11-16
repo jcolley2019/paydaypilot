@@ -15,8 +15,32 @@ export function toISODate(d: Date): string {
   return `${d.getFullYear()}-${month}-${day}`
 }
 
+/**
+ * Steps by calendar days on the local Y/M/D parts, keeping the wall-clock time.
+ * Never add `days * 24h` in milliseconds: a local day is 23 or 25 hours long when
+ * the clocks change, so that lands an hour off and can slip onto the wrong date.
+ */
 export function addDays(d: Date, days: number): Date {
-  return new Date(d.getTime() + days * MS_PER_DAY)
+  return new Date(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate() + days,
+    d.getHours(),
+    d.getMinutes(),
+    d.getSeconds(),
+    d.getMilliseconds(),
+  )
+}
+
+/**
+ * Whole calendar days from `from` to `to` (negative when `to` is earlier), by local
+ * Y/M/D parts and ignoring time of day. The parts are compared as UTC dates, where
+ * every day is exactly 24h, so a DST change inside the span cannot skew the count.
+ */
+export function calendarDaysBetween(from: Date, to: Date): number {
+  const fromDay = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())
+  const toDay = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate())
+  return Math.round((toDay - fromDay) / MS_PER_DAY)
 }
 
 export function addMonths(d: Date, months: number): Date {

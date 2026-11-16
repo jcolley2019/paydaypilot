@@ -1,9 +1,14 @@
 import type { Bill, DueRule } from '@/types/bills'
 import type { IncomeSource } from '@/types/payday'
 import { nextDueDate } from '@/lib/dueRules'
-import { addDays, clampedMonthlyDate, dateOnly, parseISODate } from '@/lib/localDate'
+import {
+  addDays,
+  calendarDaysBetween,
+  clampedMonthlyDate,
+  dateOnly,
+  parseISODate,
+} from '@/lib/localDate'
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000
 const MAX_OCCURRENCES = 100
 
 function inRange(d: Date, from: Date, to: Date): boolean {
@@ -12,7 +17,7 @@ function inRange(d: Date, from: Date, to: Date): boolean {
 
 function generateIntervalDates(anchor: Date, intervalDays: number, from: Date, to: Date): Date[] {
   const dates: Date[] = []
-  const diffDays = Math.floor((from.getTime() - anchor.getTime()) / MS_PER_DAY)
+  const diffDays = calendarDaysBetween(anchor, from)
   const k = Math.max(0, Math.floor(diffDays / intervalDays))
   let candidate = addDays(anchor, k * intervalDays)
   while (candidate.getTime() < from.getTime()) {
