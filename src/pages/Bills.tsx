@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { Camera, Plus } from 'lucide-react'
+import { Camera, ListPlus, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useBills } from '@/hooks/useBills'
 import { BillCard } from '@/components/bills/BillCard'
 import { BillFormDialog } from '@/components/bills/BillFormDialog'
+import { QuickAddDialog } from '@/components/bills/QuickAddDialog'
 import { ScanDialog } from '@/components/bills/ScanDialog'
 import { nextDueDate } from '@/lib/dueRules'
 import type { Bill, BillInsert } from '@/types/bills'
@@ -42,6 +43,7 @@ export function Bills() {
   const { bills, loading, createBill, createBills, updateBill, deleteBill } = useBills()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
+  const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [editingBill, setEditingBill] = useState<Bill | null>(null)
 
   const sorted = useMemo(() => sortBills(bills), [bills])
@@ -81,10 +83,14 @@ export function Bills() {
             estimated per month
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={() => setScanOpen(true)}>
             <Camera className="size-4" />
             Scan
+          </Button>
+          <Button type="button" variant="outline" onClick={() => setQuickAddOpen(true)}>
+            <ListPlus className="size-4" />
+            Quick add
           </Button>
           <Button type="button" onClick={openAddDialog}>
             <Plus className="size-4" />
@@ -121,6 +127,8 @@ export function Bills() {
         existingBills={bills}
         onAddBills={createBills}
       />
+
+      <QuickAddDialog open={quickAddOpen} onOpenChange={setQuickAddOpen} onAddBills={createBills} />
     </div>
   )
 }
