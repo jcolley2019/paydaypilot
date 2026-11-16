@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { DayOfMonthPicker } from '@/components/bills/DayOfMonthPicker'
+import { IntervalMonthsFields } from '@/components/bills/IntervalMonthsFields'
 import { draftAction, draftIssues, type CandidateDraft, type DueRuleDraft } from '@/components/bills/scanDraft'
 import { CATEGORY_LABELS, CSP_BUCKET_LABELS, formatAmount } from '@/lib/billLabels'
 import { sameAmount, type BillMatch, type ImportAction } from '@/lib/importActions'
@@ -24,6 +25,7 @@ const RULE_LABELS: Record<DueRule['type'], string> = {
   monthly_day: 'Monthly on a day',
   last_day: 'Last day of month',
   interval_weeks: 'Every N weeks',
+  interval_months: 'Every few months / Yearly',
   one_off: 'One-time',
 }
 
@@ -84,7 +86,13 @@ function DueRuleFields({ id, rule, issue, onChange }: DueRuleFieldsProps) {
             onChange({ ...rule, type, day: type === 'monthly_day' && rule.type === 'last_day' ? null : rule.day })
           }}
         >
-          <SelectTrigger id={`${id}-rule`} className={cn('w-full min-w-0', rule.type === 'last_day' && 'col-span-2')}>
+          <SelectTrigger
+            id={`${id}-rule`}
+            className={cn(
+              'w-full min-w-0',
+              (rule.type === 'last_day' || rule.type === 'interval_months') && 'col-span-2',
+            )}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -116,6 +124,18 @@ function DueRuleFields({ id, rule, issue, onChange }: DueRuleFieldsProps) {
               onChange={(e) => onChange({ ...rule, weeks: e.target.value })}
             />
             <span className="text-xs text-muted-foreground">weeks</span>
+          </div>
+        )}
+
+        {rule.type === 'interval_months' && (
+          <div className="col-span-2">
+            <IntervalMonthsFields
+              compact
+              invalid={Boolean(issue)}
+              months={rule.months}
+              anchor={rule.anchor}
+              onChange={({ months, anchor }) => onChange({ ...rule, months, anchor })}
+            />
           </div>
         )}
 

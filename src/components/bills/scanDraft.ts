@@ -1,4 +1,5 @@
 import { isISODate, toBillInsert } from '@/lib/billScan'
+import { isValidIntervalMonths } from '@/lib/dueRules'
 import { amountUpdate, chooseAction, findMatch, type BillMatch, type ImportAction } from '@/lib/importActions'
 import { toISODate } from '@/lib/localDate'
 import type { BillCandidate } from '@/types/billScan'
@@ -8,6 +9,7 @@ export interface DueRuleDraft {
   type: DueRule['type']
   day: number | null
   weeks: string
+  months: string
   anchor: string
   date: string
 }
@@ -42,6 +44,7 @@ const RULE_ISSUES: Record<DueRule['type'], string> = {
   monthly_day: 'Pick a day',
   last_day: '',
   interval_weeks: 'Enter whole weeks and a start date',
+  interval_months: 'Enter 2–24 months and the most recent due date',
   one_off: 'Pick a date',
 }
 
@@ -51,9 +54,18 @@ function ruleDraft(rule: DueRule): DueRuleDraft {
     type: rule.type,
     day: rule.type === 'monthly_day' ? rule.day : null,
     weeks: rule.type === 'interval_weeks' ? String(rule.weeks) : '2',
-    anchor: rule.type === 'interval_weeks' ? rule.anchor : today,
+    months: rule.type === 'interval_months' ? String(rule.months) : '3',
+    anchor: rule.type === 'interval_weeks' || rule.type === 'interval_months' ? rule.anchor : today,
     date: rule.type === 'one_off' ? rule.date : today,
   }
+}
+
+/** The interval_months rule for typed-in months + anchor, or null while incomplete. */
+export function intervalMonthsRule(months: string, anchor: string): DueRule | null {
+  const n = Number(months)
+  return months.trim() !== '' && isValidIntervalMonths(n) && isISODate(anchor)
+    ? { type: 'interval_months', months: n, anchor }
+    : null
 }
 
 /** The due rule a draft describes, or null while it's incomplete. */
@@ -69,6 +81,8 @@ export function buildDueRule(rule: DueRuleDraft): DueRule | null {
         ? { type: 'interval_weeks', weeks, anchor: rule.anchor }
         : null
     }
+    case 'interval_months':
+      return intervalMonthsRule(rule.months, rule.anchor)
     case 'one_off':
       return isISODate(rule.date) ? { type: 'one_off', date: rule.date } : null
   }

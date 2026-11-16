@@ -22,13 +22,16 @@ function monthlyPaycheckFrequency(incomeSources: IncomeSource[]): number {
     .reduce((sum, s) => sum + SCHEDULE_MONTHLY_MULTIPLIER[s.schedule], 0)
 }
 
-function billMonthlyAmount(bill: Bill): number {
+/** A bill flattened to an average monthly cost; one-off bills don't recur, so they count as 0. */
+export function billMonthlyAmount(bill: Pick<Bill, 'amount' | 'due_rule'>): number {
   switch (bill.due_rule.type) {
     case 'monthly_day':
     case 'last_day':
       return bill.amount
     case 'interval_weeks':
       return (bill.amount * (52 / bill.due_rule.weeks)) / 12
+    case 'interval_months':
+      return bill.amount / bill.due_rule.months
     case 'one_off':
       return 0
   }

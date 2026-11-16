@@ -37,6 +37,8 @@ export type DueRule =
   | { type: 'monthly_day'; day: number }
   | { type: 'last_day' }
   | { type: 'interval_weeks'; weeks: number; anchor: string }
+  /** Every N months (2–24) counted from a known due date; the day clamps like monthly_day. */
+  | { type: 'interval_months'; months: number; anchor: string }
   | { type: 'one_off'; date: string }
 
 export interface Bill {

@@ -23,6 +23,8 @@ import type { AccountType, Bill, BillCategory, BillInsert, CspBucket, DueRule } 
 import { ACCOUNT_TYPES, BILL_CATEGORIES, CSP_BUCKETS } from '@/types/bills'
 import { CATEGORY_LABELS, CSP_BUCKET_LABELS } from '@/lib/billLabels'
 import { DayOfMonthPicker, type DayOfMonthValue } from '@/components/bills/DayOfMonthPicker'
+import { IntervalMonthsFields } from '@/components/bills/IntervalMonthsFields'
+import { MAX_INTERVAL_MONTHS, MIN_INTERVAL_MONTHS } from '@/lib/dueRules'
 
 type RuleType = DueRule['type']
 
@@ -35,6 +37,8 @@ interface FormState {
   monthlyDay: string
   intervalWeeks: string
   intervalAnchor: string
+  intervalMonths: string
+  monthsAnchor: string
   oneOffDate: string
   autopay: boolean
   paymentMethod: string
@@ -73,6 +77,8 @@ function emptyForm(): FormState {
     monthlyDay: '1',
     intervalWeeks: '2',
     intervalAnchor: todayISO(),
+    intervalMonths: '3',
+    monthsAnchor: todayISO(),
     oneOffDate: todayISO(),
     autopay: false,
     paymentMethod: '',
@@ -116,6 +122,10 @@ function formFromBill(bill: Bill): FormState {
     base.intervalWeeks = String(bill.due_rule.weeks)
     base.intervalAnchor = bill.due_rule.anchor
   }
+  if (bill.due_rule.type === 'interval_months') {
+    base.intervalMonths = String(bill.due_rule.months)
+    base.monthsAnchor = bill.due_rule.anchor
+  }
   if (bill.due_rule.type === 'one_off') base.oneOffDate = bill.due_rule.date
 
   return base
@@ -133,6 +143,15 @@ function buildDueRule(form: FormState): DueRule {
         weeks: Number(form.intervalWeeks) || 1,
         anchor: form.intervalAnchor,
       }
+    case 'interval_months': {
+      // The inputs enforce 2–24 on submit; clamp anyway so a stray value can't reach the db.
+      const months = Math.round(Number(form.intervalMonths)) || 3
+      return {
+        type: 'interval_months',
+        months: Math.min(MAX_INTERVAL_MONTHS, Math.max(MIN_INTERVAL_MONTHS, months)),
+        anchor: form.monthsAnchor,
+      }
+    }
     case 'one_off':
       return { type: 'one_off', date: form.oneOffDate }
   }
@@ -281,6 +300,7 @@ export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormD
                 <SelectItem value="monthly_day">Monthly on a day</SelectItem>
                 <SelectItem value="last_day">Last day of month</SelectItem>
                 <SelectItem value="interval_weeks">Every N weeks</SelectItem>
+                <SelectItem value="interval_months">Every few months / Yearly</SelectItem>
                 <SelectItem value="one_off">One-time</SelectItem>
               </SelectContent>
             </Select>
@@ -326,6 +346,16 @@ export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormD
                   />
                 </div>
               </div>
+            )}
+
+            {form.ruleType === 'interval_months' && (
+              <IntervalMonthsFields
+                months={form.intervalMonths}
+                anchor={form.monthsAnchor}
+                onChange={({ months, anchor }) =>
+                  setForm((f) => ({ ...f, intervalMonths: months, monthsAnchor: anchor }))
+                }
+              />
             )}
 
             {form.ruleType === 'one_off' && (

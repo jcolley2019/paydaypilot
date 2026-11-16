@@ -8,22 +8,11 @@ import { BillFormDialog } from '@/components/bills/BillFormDialog'
 import { QuickAddDialog } from '@/components/bills/QuickAddDialog'
 import { ScanDialog } from '@/components/bills/ScanDialog'
 import { nextDueDate } from '@/lib/dueRules'
+import { billMonthlyAmount } from '@/lib/plan'
 import type { Bill, BillInsert } from '@/types/bills'
 
 function monthlyEstimate(bills: Bill[]): number {
-  return bills
-    .filter((b) => b.active)
-    .reduce((sum, bill) => {
-      switch (bill.due_rule.type) {
-        case 'monthly_day':
-        case 'last_day':
-          return sum + bill.amount
-        case 'interval_weeks':
-          return sum + (bill.amount * 52) / bill.due_rule.weeks / 12
-        case 'one_off':
-          return sum
-      }
-    }, 0)
+  return bills.filter((b) => b.active).reduce((sum, bill) => sum + billMonthlyAmount(bill), 0)
 }
 
 function sortBills(bills: Bill[]): Bill[] {
