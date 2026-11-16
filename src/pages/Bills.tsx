@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Camera, ListPlus, Plus } from 'lucide-react'
+import { FileUp, ListPlus, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useBills } from '@/hooks/useBills'
@@ -85,8 +85,8 @@ export function Bills() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={() => setScanOpen(true)}>
-            <Camera className="size-4" />
-            Scan
+            <FileUp className="size-4" />
+            Import
           </Button>
           <Button type="button" variant="outline" onClick={() => setQuickAddOpen(true)}>
             <ListPlus className="size-4" />

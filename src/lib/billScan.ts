@@ -50,17 +50,17 @@ async function toScanError(error: unknown): Promise<BillScanError> {
     }
     return new BillScanError(error.message, response.status)
   }
-  return new BillScanError(error instanceof Error ? error.message : 'Bill scan failed.', null)
+  return new BillScanError(error instanceof Error ? error.message : 'Bill import failed.', null)
 }
 
 export async function scanBills(
   files: File[],
   existing: { name: string; amount: number }[],
 ): Promise<BillCandidate[]> {
-  if (files.length === 0) throw new Error('Add at least one statement or screenshot to scan.')
-  if (files.length > MAX_SCAN_FILES) throw new Error(`Scan at most ${MAX_SCAN_FILES} files at a time.`)
+  if (files.length === 0) throw new Error('Add at least one statement, screenshot, or bill photo to import.')
+  if (files.length > MAX_SCAN_FILES) throw new Error(`Import at most ${MAX_SCAN_FILES} files at a time.`)
   for (const file of files) {
-    if (!isScanMime(file.type)) throw new Error(`${file.name}: only PDF, PNG, JPG, or WebP files can be scanned.`)
+    if (!isScanMime(file.type)) throw new Error(`${file.name}: only PDF, PNG, JPG, or WebP files can be imported.`)
     if (file.size === 0) throw new Error(`${file.name} is empty.`)
     if (file.size > MAX_SCAN_FILE_BYTES) throw new Error(`${file.name} is over the 8 MB limit.`)
   }
@@ -79,7 +79,7 @@ export async function scanBills(
 
   const { data, error } = await supabase.functions.invoke<ScanResponse>('extract-bills', { body })
   if (error) throw await toScanError(error)
-  if (!data || !Array.isArray(data.candidates)) throw new Error('Bill scan returned an unexpected response.')
+  if (!data || !Array.isArray(data.candidates)) throw new Error('Bill import returned an unexpected response.')
   return data.candidates
 }
 

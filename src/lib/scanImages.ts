@@ -66,7 +66,7 @@ export function encodedBytes(bytes: number): number {
 /** The verdict for one file on its own; planScanBatch adds the batch-wide limits. */
 export function planScanFile(file: ScanFileInfo): ScanFilePlan {
   const mime = resolveScanMime(file.name, file.mime)
-  if (!mime) return { kind: 'reject', reason: 'Only photos (JPG, PNG, WebP, HEIC) and PDFs can be scanned' }
+  if (!mime) return { kind: 'reject', reason: 'Only photos (JPG, PNG, WebP, HEIC) and PDFs can be imported' }
   if (file.bytes <= 0) return { kind: 'reject', reason: 'This file is empty' }
   if (mime === 'application/pdf') {
     // PDFs can't be shrunk in the browser, so an oversized one goes back to the user.
@@ -90,12 +90,12 @@ export function planScanBatch(files: ScanFileInfo[]): ScanFilePlan[] {
     const plan = planScanFile(file)
     if (plan.kind === 'reject') return plan
     if (kept === SCAN_BATCH_MAX_FILES) {
-      return { kind: 'reject', reason: `Only ${SCAN_BATCH_MAX_FILES} files per scan — scan this one next` }
+      return { kind: 'reject', reason: `Only ${SCAN_BATCH_MAX_FILES} files per import — import this one next` }
     }
     // A file that still needs shrinking counts at the size it's guaranteed to end up under.
     const encoded = encodedBytes(plan.kind === 'shrink' ? SCAN_FILE_TARGET_BYTES : file.bytes)
     if (encodedTotal + encoded > SCAN_BATCH_MAX_ENCODED_BYTES) {
-      return { kind: 'reject', reason: 'Over the 30 MB scan limit — scan this one separately' }
+      return { kind: 'reject', reason: 'Over the 30 MB import limit — import this one separately' }
     }
     kept += 1
     encodedTotal += encoded

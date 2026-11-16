@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
-import { Camera, CircleAlert, ImagePlus, LoaderCircle, RotateCcw, ScanText, X } from 'lucide-react'
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
+import { Camera, CircleAlert, FileUp, ImagePlus, LoaderCircle, RotateCcw, X } from 'lucide-react'
 import {
   Dialog,
   DialogClose,
@@ -42,7 +42,7 @@ interface ScanProblem {
 // One request does all of this; the lines just keep a long wait honest-feeling.
 const EXTRACTING_STEPS = [
   'Reading your files…',
-  'Looking for charges that repeat…',
+  'Looking for bills and due dates…',
   'Matching them against the bills you already have…',
 ]
 
@@ -57,6 +57,11 @@ function uploadFile(item: PickedFile): File {
   return mime && mime !== item.original.type
     ? new File([item.original], item.original.name, { type: mime })
     : item.original
+}
+
+/** True for a drag that carries files (from the desktop), not text or a link from the page. */
+function carriesFiles(event: DragEvent): boolean {
+  return Array.from(event.dataTransfer.types).includes('Files')
 }
 
 function plural(count: number, noun: string): string {
@@ -79,6 +84,9 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
   const [drafts, setDrafts] = useState<CandidateDraft[]>([])
   const [adding, setAdding] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  // dragenter/dragleave fire for every child the pointer crosses; the drag is over once this is 0.
+  const dragDepth = useRef(0)
 
   const cameraInput = useRef<HTMLInputElement>(null)
   const filesInput = useRef<HTMLInputElement>(null)
@@ -142,6 +150,12 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
     setFoundNothing(false)
     setDrafts([])
     setAdding(false)
+    endDrag()
+  }
+
+  function endDrag() {
+    dragDepth.current = 0
+    setDragging(false)
   }
 
   function handleOpenChange(next: boolean) {
@@ -197,6 +211,33 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
     addFiles(files, fromCamera)
   }
 
+  function handleDragEnter(event: DragEvent) {
+    if (!carriesFiles(event)) return
+    event.preventDefault()
+    dragDepth.current += 1
+    if (stage === 'pick') setDragging(true)
+  }
+
+  function handleDragOver(event: DragEvent) {
+    if (!carriesFiles(event)) return
+    // Without this the browser opens the dropped file instead; outside the pick stage it's refused.
+    event.preventDefault()
+    event.dataTransfer.dropEffect = stage === 'pick' ? 'copy' : 'none'
+  }
+
+  function handleDragLeave(event: DragEvent) {
+    if (!carriesFiles(event)) return
+    dragDepth.current = Math.max(0, dragDepth.current - 1)
+    if (dragDepth.current === 0) setDragging(false)
+  }
+
+  function handleDrop(event: DragEvent) {
+    if (!carriesFiles(event)) return
+    event.preventDefault()
+    endDrag()
+    if (stage === 'pick') addFiles(Array.from(event.dataTransfer.files), false)
+  }
+
   function removeFile(id: string) {
     setItems((list) => list.filter((item) => item.id !== id))
     setProblem(null)
@@ -227,7 +268,7 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
     } catch (err) {
       if (session.current !== current) return
       setProblem({
-        message: err instanceof Error ? err.message : 'Bill scan failed.',
+        message: err instanceof Error ? err.message : 'Bill import failed.',
         // Not being allowlisted (403) or a rejected request (4xx) won't change on retry;
         // timeouts and model errors (5xx) or a dropped connection might.
         retryable: err instanceof BillScanError && (err.status === null || err.status >= 500),
@@ -250,12 +291,12 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
     setStage('pick')
   }
 
-  const title = stage === 'pick' ? 'Scan bills' : stage === 'extracting' ? 'Scanning…' : 'Review bills'
+  const title = stage === 'pick' ? 'Import bills' : stage === 'extracting' ? 'Importing…' : 'Review bills'
   const description =
     stage === 'pick'
-      ? "Banking-app screenshots, photos of paper bills, or PDF statements — we'll pull out the recurring bills."
+      ? "Drop in statements, screenshots, or photos of bills — we'll pull out the bills and due dates."
       : stage === 'extracting'
-        ? `Finding recurring bills in ${plural(sendable.length, 'file')}.`
+        ? `Finding bills in ${plural(sendable.length, 'file')}.`
         : duplicates > 0
           ? `Found ${plural(drafts.length, 'bill')}. ${duplicates === 1 ? 'One looks' : `${duplicates} look`} like a bill you already have, so ${duplicates === 1 ? 'it starts' : 'they start'} unchecked.`
           : `Found ${plural(drafts.length, 'bill')}. Check the details, then add them.`
@@ -265,6 +306,10 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
       <DialogContent
         showCloseButton={false}
         onInteractOutside={(event) => event.preventDefault()}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         className="top-0 left-0 flex h-dvh max-h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none p-0 sm:top-1/2 sm:left-1/2 sm:h-auto sm:max-h-[min(90dvh,48rem)] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl"
       >
         <DialogHeader className="border-b border-border px-4 pt-[max(1rem,env(safe-area-inset-top))] pr-12 pb-3 sm:pt-4">
@@ -304,17 +349,18 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
 
               {foundNothing && (
                 <div role="status" className="flex flex-col gap-1 rounded-lg border border-border bg-muted/50 p-3">
-                  <p className="font-medium">We couldn't find bills in these images.</p>
+                  <p className="font-medium">We couldn't find any bills in these files.</p>
                   <p className="text-muted-foreground">
-                    Try a screenshot that shows charge names and amounts, or a full statement page.
+                    Try a photo that shows the biller, amount due, and due date, or a full statement page.
                   </p>
                 </div>
               )}
 
               {items.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-10 text-center">
-                  <ScanText className="size-8 text-muted-foreground" />
-                  <p className="font-medium">Add statements or screenshots</p>
+                  <FileUp className="size-8 text-muted-foreground" />
+                  <p className="font-medium pointer-fine:hidden">Add statements, screenshots, or bill photos</p>
+                  <p className="hidden font-medium pointer-fine:block">Drag files here, or choose them below</p>
                   <p className="text-muted-foreground">
                     Up to {SCAN_BATCH_MAX_FILES} files. Large photos are shrunk before they're sent.
                   </p>
@@ -392,12 +438,12 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
                 Cancel
               </Button>
               <Button type="button" onClick={extract} disabled={sendable.length === 0 || shrinking}>
-                {shrinking ? <LoaderCircle className="animate-spin" /> : <ScanText />}
+                {shrinking ? <LoaderCircle className="animate-spin" /> : <FileUp />}
                 {shrinking
                   ? 'Preparing…'
                   : sendable.length === 0
-                    ? 'Scan'
-                    : `Scan ${plural(sendable.length, 'file')}`}
+                    ? 'Import'
+                    : `Import ${plural(sendable.length, 'file')}`}
               </Button>
             </>
           )}
@@ -420,6 +466,16 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
             </>
           )}
         </div>
+
+        {dragging && stage === 'pick' && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary bg-background/90 text-center"
+          >
+            <FileUp className="size-8 text-primary" />
+            <p className="font-medium">Drop to add files</p>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

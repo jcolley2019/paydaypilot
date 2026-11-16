@@ -1,6 +1,7 @@
 // PP.7.1 — Bill Scan extractor.
 // POST { files: [{ name, mime, data /* base64 */ }], existing: [{ name, amount }] }
-//   -> { candidates: Candidate[] } — candidate recurring bills shaped for the `bills` table.
+//   -> { candidates: Candidate[] } — candidate bills shaped for the `bills` table: recurring bills
+//      found in statements, plus one candidate per photographed single bill / notice (PP.8.2).
 // Auth: the caller's Supabase user JWT; never the service role key.
 // Secrets: ANTHROPIC_API_KEY (required), ALLOWED_SCAN_EMAILS (required, comma-separated
 // allowlist; anyone else gets 403), ANTHROPIC_MODEL (optional override).
@@ -76,13 +77,27 @@ interface AnthropicMessage {
   content?: { type: string; name?: string; input?: unknown; text?: string }[]
 }
 
-const INSTRUCTIONS = `Find the user's RECURRING bills in these bank/card statements and banking-app screenshots, then call report_bills exactly once with every candidate (an empty list if there are none).
+const INSTRUCTIONS = `Find the user's bills in these files, then call report_bills exactly once with every candidate (an empty list if there are none). Each file is one of two kinds; decide per file.
+
+A. STATEMENT — a bank/card statement or banking-app screenshot listing many transactions. Find the RECURRING bills in it:
 - Extract recurring obligations only: subscriptions, utilities, insurance, rent/mortgage, loan and card payments, phone, etc.
 - Ignore one-off purchases, groceries, fuel, restaurants, transfers, deposits, income and fees.
 - A credit-card statement itself yields ONE candidate: the card payment. is_debt true, account_type "card", amount = the minimum payment, amount_type "estimate"; fill debt_balance, debt_apr, debt_min_payment, credit_limit, min_payment_percent and min_payment_floor when the statement shows them.
 - Loan statements: is_debt true, account_type "loan".
 - Use the most recent charge amount; amount_type "estimate" when amounts vary.
 - due_rule day = the recurring charge day.
+
+B. SINGLE BILL — one bill, invoice or payment notice from one biller (often a photo of a paper bill): a toll bill, utility bill, medical or repair invoice, final notice, etc. It yields ONE candidate even though nothing in it repeats:
+- name = the biller (the company or agency to pay), not the customer.
+- amount = the total amount due now ("Amount Due", "Total Due", "Pay This Amount"), including any past-due balance and fees it already counts.
+- due_rule: {"type":"one_off","date":"YYYY-MM-DD"} with the printed due date when it reads as a single notice (toll, invoice, fine, final notice, one-time service); amount_type "fixed". When it is clearly a recurring utility or subscription bill (electric, water, gas, internet, phone, insurance premium, membership), use {"type":"monthly_day","day":N} with N = the day of the printed due date; amount_type "estimate" when the amount depends on usage, else "fixed".
+- A due date printed without a year takes the year that puts it closest to today's date. If no due date is printed at all, use one_off with today's date, say "no due date shown" in evidence and keep confidence at or below 0.5.
+- is_debt false and account_type null with the debt fields null, unless the bill is itself a card or loan statement — then the card and loan rules in A apply.
+- autopay true only when the bill says it will be paid automatically; otherwise null.
+- evidence quotes what was read, e.g. "AMOUNT DUE $1,343.39, due Dec 05, 2026".
+- Several photos or pages of the same bill are still ONE candidate.
+
+Both kinds:
 - Merge the same merchant across files into one candidate.
 - Compare against the existing bills by merchant name/amount; on a match set possible_duplicate_of to that bill's exact name.
 - Percentages are plain numbers (24.99 means 24.99%). source_file is the file name as listed below.`
@@ -91,13 +106,13 @@ const ISO_DATE_SCHEMA = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
 const NULLABLE_NUMBER = { type: ['number', 'null'] }
 
 const CANDIDATE_PROPERTIES = {
-  name: { type: 'string', description: 'Merchant or bill name, e.g. "Netflix"' },
-  amount: { type: 'number', exclusiveMinimum: 0, description: 'Dollars per charge' },
+  name: { type: 'string', description: 'Merchant, biller or bill name, e.g. "Netflix"' },
+  amount: { type: 'number', exclusiveMinimum: 0, description: 'Dollars per charge, or the amount due on a single bill' },
   amount_type: { type: 'string', enum: ['fixed', 'estimate'] },
   category: { type: 'string', enum: CATEGORIES },
   due_rule: {
     description:
-      'monthly_day (day = the charge day) | last_day | interval_weeks (weekly/biweekly; anchor = a recent charge date) | one_off',
+      'monthly_day (day = the charge or due day) | last_day | interval_weeks (weekly/biweekly; anchor = a recent charge date) | one_off (date = the due date of a single bill or notice)',
     anyOf: [
       {
         type: 'object',
@@ -135,7 +150,10 @@ const CANDIDATE_PROPERTIES = {
   min_payment_percent: { type: ['number', 'null'], description: 'Percent of balance, e.g. 1 for 1%' },
   min_payment_floor: { type: ['number', 'null'], description: 'Dollar floor of the minimum payment' },
   confidence: { type: 'number', minimum: 0, maximum: 1 },
-  evidence: { type: 'string', description: 'Short proof, e.g. "charged 3x: Jul 12, Aug 12, Sep 12"' },
+  evidence: {
+    type: 'string',
+    description: 'Short proof, e.g. "charged 3x: Jul 12, Aug 12, Sep 12" or "AMOUNT DUE $1,343.39, due Dec 05, 2026"',
+  },
   source_file: { type: 'string', description: 'File name as listed in the prompt' },
   possible_duplicate_of: {
     type: ['string', 'null'],
@@ -145,7 +163,8 @@ const CANDIDATE_PROPERTIES = {
 
 const REPORT_BILLS_TOOL = {
   name: 'report_bills',
-  description: 'Report every recurring bill found in the files. Call exactly once, with all candidates.',
+  description:
+    'Report every bill found in the files: recurring bills from statements and the bill on each single bill or notice. Call exactly once, with all candidates.',
   input_schema: {
     type: 'object',
     properties: {
@@ -338,7 +357,7 @@ Deno.serve(async (req) => {
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean)
     const email = user.email?.trim().toLowerCase()
-    if (!email || !allowedEmails.includes(email)) return fail(403, "Bill scanning isn't enabled for this account")
+    if (!email || !allowedEmails.includes(email)) return fail(403, "Bill import isn't enabled for this account")
 
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
     if (!apiKey) return fail(500, 'ANTHROPIC_API_KEY not set')
@@ -384,7 +403,7 @@ Deno.serve(async (req) => {
     const message = (await res.json()) as AnthropicMessage
     if (message.stop_reason === 'refusal') return fail(502, 'The model declined to read these files')
     if (message.stop_reason === 'max_tokens') {
-      return fail(502, 'The model ran out of room before finishing - scan fewer files at a time')
+      return fail(502, 'The model ran out of room before finishing - import fewer files at a time')
     }
     const call = message.content?.find((block) => block.type === 'tool_use' && block.name === 'report_bills')
     if (!call) {

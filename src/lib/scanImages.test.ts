@@ -19,7 +19,7 @@ function kinds(files: ScanFileInfo[]) {
   return planScanBatch(files).map((plan) => plan.kind)
 }
 
-const UNSUPPORTED = 'Only photos (JPG, PNG, WebP, HEIC) and PDFs can be scanned'
+const UNSUPPORTED = 'Only photos (JPG, PNG, WebP, HEIC) and PDFs can be imported'
 
 describe('planScanBatch — per-file limits', () => {
   it('sends photos and screenshots up to 4.5 MB as they are', () => {
@@ -91,7 +91,7 @@ describe('planScanBatch — batch limits', () => {
     const files = Array.from({ length: 9 }, (_, i) => file(`shot-${i + 1}.png`, 'image/png', 500 * KB))
     const plans = planScanBatch(files)
     expect(plans.slice(0, 8).every((plan) => plan.kind === 'ok')).toBe(true)
-    expect(plans[8]).toEqual({ kind: 'reject', reason: 'Only 8 files per scan — scan this one next' })
+    expect(plans[8]).toEqual({ kind: 'reject', reason: 'Only 8 files per import — import this one next' })
   })
 
   it("doesn't count rejected files toward the 8", () => {
@@ -112,7 +112,7 @@ describe('planScanBatch — batch limits', () => {
     expect(5 * encodedBytes(SCAN_FILE_TARGET_BYTES)).toBe(SCAN_BATCH_MAX_ENCODED_BYTES)
     const plans = planScanBatch(files)
     expect(plans.map((plan) => plan.kind)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'reject'])
-    expect(plans[5].reason).toBe('Over the 30 MB scan limit — scan this one separately')
+    expect(plans[5].reason).toBe('Over the 30 MB import limit — import this one separately')
   })
 
   it('counts files still to be shrunk at the 4.5 MB they are guaranteed to fit under', () => {
