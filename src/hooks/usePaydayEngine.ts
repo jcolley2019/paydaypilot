@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
-import { syncHorizon } from '@/lib/horizon'
+import { onHorizonSynced, requestHorizonSync } from '@/lib/horizonSync'
 import { assignInstances } from '@/lib/assignment'
 import { addDays, toISODate } from '@/lib/localDate'
 import type { BillInstance, InstanceAlert, Paycheck } from '@/types/payday'
@@ -26,17 +26,18 @@ export function usePaydayEngine() {
   const [instances, setInstances] = useState<BillInstanceWithBill[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const loadingRef = useRef(false)
+  const loadSeq = useRef(0)
 
   const load = useCallback(async () => {
+    // Every call fetches and the latest one wins: a load asked for while another is in flight
+    // (a sync just landed, a bill was marked paid) must not be answered with the older read.
+    const seq = ++loadSeq.current
     if (!user) {
       setPaychecks([])
       setInstances([])
       setLoading(false)
       return
     }
-    if (loadingRef.current) return
-    loadingRef.current = true
     setLoading(true)
     setError(null)
 
@@ -61,11 +62,12 @@ export function usePaydayEngine() {
         .order('due_date', { ascending: true }),
     ])
 
+    if (seq !== loadSeq.current) return
+
     if (paycheckRes.error || instanceRes.error) {
       const message = paycheckRes.error?.message ?? instanceRes.error?.message ?? 'Unknown error'
       setError(message)
       toast.error(`Failed to load payday plan: ${message}`)
-      loadingRef.current = false
       setLoading(false)
       return
     }
@@ -90,7 +92,6 @@ export function usePaydayEngine() {
       })),
     )
 
-    loadingRef.current = false
     setLoading(false)
   }, [user, profile])
 
@@ -102,13 +103,23 @@ export function usePaydayEngine() {
     if (!user) return
     setLoading(true)
     try {
-      await syncHorizon(user.id)
+      // On success the subscription below does the reload.
+      await requestHorizonSync(user.id)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       setError(message)
       toast.error(`Failed to sync payday plan: ${message}`)
+      await load()
     }
-    await load()
+  }, [user, load])
+
+  // Any sync — this hook's own, or one a bill change kicked off from another page or
+  // component — means the rows on screen may be out of date.
+  useEffect(() => {
+    if (!user) return
+    return onHorizonSynced((userId) => {
+      if (userId === user.id) void load()
+    })
   }, [user, load])
 
   useEffect(() => {

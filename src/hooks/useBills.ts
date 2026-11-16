@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
+import { requestHorizonSync } from '@/lib/horizonSync'
 import type { Bill, BillInsert, BillUpdate } from '@/types/bills'
 
 export function useBills() {
@@ -32,6 +33,18 @@ export function useBills() {
     fetchBills()
   }, [fetchBills])
 
+  /**
+   * Bills drive the generated instances, so each saved change re-syncs the payday plan —
+   * once per change, however many bills it touched. It runs in the background: the bill is
+   * already saved, and anything showing the plan reloads when the sync lands.
+   */
+  function syncPlan(userId: string) {
+    requestHorizonSync(userId).catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      toast.error(`Saved, but the payday plan didn't update: ${message}`)
+    })
+  }
+
   async function createBill(bill: BillInsert) {
     if (!user) return
     const { error } = await supabase
@@ -42,6 +55,7 @@ export function useBills() {
       return
     }
     toast.success('Bill added')
+    syncPlan(user.id)
     await fetchBills()
   }
 
@@ -56,6 +70,7 @@ export function useBills() {
       return false
     }
     toast.success(newBills.length === 1 ? 'Bill added' : `${newBills.length} bills added`)
+    syncPlan(user.id)
     await fetchBills()
     return true
   }
@@ -72,6 +87,7 @@ export function useBills() {
       return
     }
     toast.success('Bill updated')
+    syncPlan(user.id)
     await fetchBills()
   }
 
@@ -87,6 +103,7 @@ export function useBills() {
       return
     }
     toast.success('Bill deleted')
+    syncPlan(user.id)
     await fetchBills()
   }
 

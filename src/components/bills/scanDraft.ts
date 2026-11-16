@@ -84,7 +84,7 @@ export function draftFromCandidate(candidate: BillCandidate, index: number): Can
     include: !candidate.possible_duplicate_of,
     duplicateOf: candidate.possible_duplicate_of || null,
     name: base.name,
-    amount: String(base.amount),
+    amount: base.amount.toFixed(2),
     category: base.category,
     rule: ruleDraft(base.due_rule),
     cspBucket: base.csp_bucket,

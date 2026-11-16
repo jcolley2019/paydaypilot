@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
-import { generatePayDates, occurrencesForBill } from '@/lib/paydays'
+import { generatePayDates } from '@/lib/paydays'
 import { assignInstances } from '@/lib/assignment'
+import { planInstanceSync } from '@/lib/horizonPlan'
 import { addDays, toISODate } from '@/lib/localDate'
 import type { Bill } from '@/types/bills'
 import type { BillInstance, IncomeSource, Paycheck } from '@/types/payday'
@@ -61,17 +62,19 @@ async function fetchInstances(userId: string, from: string, to: string): Promise
 
 export async function syncHorizon(userId: string): Promise<void> {
   const today = new Date()
+  const horizonEnd = addDays(today, HORIZON_DAYS)
   const from = toISODate(today)
-  const to = toISODate(addDays(today, HORIZON_DAYS))
+  const to = toISODate(horizonEnd)
 
-  const [bufferDays, incomeSources, activeBills] = await Promise.all([
+  const [bufferDays, incomeSources, activeBills, existingInstances] = await Promise.all([
     fetchBufferDays(userId),
     fetchActiveIncomeSources(userId),
     fetchActiveBills(userId),
+    fetchInstances(userId, from, to),
   ])
 
   const paycheckRows = incomeSources.flatMap((source) =>
-    generatePayDates(source, today, addDays(today, HORIZON_DAYS)).map((date) => ({
+    generatePayDates(source, today, horizonEnd).map((date) => ({
       user_id: userId,
       income_source_id: source.id,
       pay_date: toISODate(date),
@@ -86,19 +89,40 @@ export async function syncHorizon(userId: string): Promise<void> {
     if (error) throw error
   }
 
-  const instanceRows = activeBills.flatMap((bill) =>
-    occurrencesForBill(bill, today, addDays(today, HORIZON_DAYS)).map((date) => ({
-      user_id: userId,
-      bill_id: bill.id,
-      due_date: toISODate(date),
-      amount: bill.amount,
-    })),
-  )
+  const plan = planInstanceSync(activeBills, existingInstances, today, horizonEnd)
 
-  if (instanceRows.length > 0) {
+  // The status/override filters repeat the plan's own rules, so a row that was marked paid
+  // or pinned to a paycheck since the fetch above is still left alone.
+  if (plan.deleteIds.length > 0) {
     const { error } = await supabase
       .from('bill_instances')
-      .upsert(instanceRows, { onConflict: 'bill_id,due_date', ignoreDuplicates: true })
+      .delete()
+      .in('id', plan.deleteIds)
+      .eq('status', 'planned')
+      .eq('override', false)
+    if (error) throw error
+  }
+
+  const idsByAmount = new Map<number, string[]>()
+  for (const { id, amount } of plan.amountUpdates) {
+    idsByAmount.set(amount, [...(idsByAmount.get(amount) ?? []), id])
+  }
+  for (const [amount, ids] of idsByAmount) {
+    const { error } = await supabase
+      .from('bill_instances')
+      .update({ amount })
+      .in('id', ids)
+      .eq('status', 'planned')
+    if (error) throw error
+  }
+
+  if (plan.inserts.length > 0) {
+    const { error } = await supabase
+      .from('bill_instances')
+      .upsert(
+        plan.inserts.map((row) => ({ user_id: userId, ...row })),
+        { onConflict: 'bill_id,due_date', ignoreDuplicates: true },
+      )
     if (error) throw error
   }
 
@@ -119,21 +143,5 @@ export async function syncHorizon(userId: string): Promise<void> {
         .eq('id', instance.id)
       if (error) throw error
     }
-  }
-
-  const activeBillIds = new Set(activeBills.map((bill) => bill.id))
-  const staleIds = instances
-    .filter(
-      (instance) =>
-        instance.status === 'planned' &&
-        !instance.override &&
-        instance.due_date >= from &&
-        !activeBillIds.has(instance.bill_id),
-    )
-    .map((instance) => instance.id)
-
-  if (staleIds.length > 0) {
-    const { error } = await supabase.from('bill_instances').delete().in('id', staleIds)
-    if (error) throw error
   }
 }
