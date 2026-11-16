@@ -40,7 +40,7 @@ function sortBills(bills: Bill[]): Bill[] {
 }
 
 export function Bills() {
-  const { bills, loading, createBill, createBills, updateBill, deleteBill } = useBills()
+  const { bills, loading, createBill, createBills, updateBill, importBills, deleteBill } = useBills()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
@@ -125,7 +125,7 @@ export function Bills() {
         open={scanOpen}
         onOpenChange={setScanOpen}
         existingBills={bills}
-        onAddBills={createBills}
+        onImport={importBills}
       />
 
       <QuickAddDialog open={quickAddOpen} onOpenChange={setQuickAddOpen} onAddBills={createBills} />

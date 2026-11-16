@@ -11,8 +11,15 @@ import {
 import { Button } from '@/components/ui/button'
 import { ScanCandidateCard } from '@/components/bills/ScanCandidateCard'
 import { ScanFileList, type ScanFileRow } from '@/components/bills/ScanFileList'
-import { draftFromCandidate, draftToInsert, type CandidateDraft } from '@/components/bills/scanDraft'
+import {
+  draftAction,
+  draftFromCandidate,
+  draftToInsert,
+  draftToUpdate,
+  type CandidateDraft,
+} from '@/components/bills/scanDraft'
 import { BillScanError, scanBills } from '@/lib/billScan'
+import { batchLabel } from '@/lib/importActions'
 import {
   SCAN_BATCH_MAX_FILES,
   downscaleImage,
@@ -20,7 +27,7 @@ import {
   planScanFile,
   resolveScanMime,
 } from '@/lib/scanImages'
-import type { Bill, BillInsert } from '@/types/bills'
+import type { Bill, BillInsert, BillUpdate } from '@/types/bills'
 
 interface PickedFile {
   id: string
@@ -72,11 +79,11 @@ interface ScanDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   existingBills: Bill[]
-  /** Saves the chosen bills; true when they were added. */
-  onAddBills: (bills: BillInsert[]) => Promise<boolean>
+  /** Saves the batch — new bills and amount updates — with one plan sync; true when all of it saved. */
+  onImport: (inserts: BillInsert[], updates: { id: string; updates: BillUpdate }[]) => Promise<boolean>
 }
 
-export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: ScanDialogProps) {
+export function ScanDialog({ open, onOpenChange, existingBills, onImport }: ScanDialogProps) {
   const [stage, setStage] = useState<Stage>('pick')
   const [items, setItems] = useState<PickedFile[]>([])
   const [problem, setProblem] = useState<ScanProblem | null>(null)
@@ -129,10 +136,14 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
     }
   })
 
-  const included = drafts.filter((draft) => draft.include)
-  const inserts = included.map(draftToInsert)
-  const incomplete = inserts.some((insert) => insert === null)
-  const duplicates = drafts.filter((draft) => draft.duplicateOf).length
+  const toAdd = drafts.filter((draft) => draftAction(draft) === 'add')
+  const toUpdate = drafts.filter((draft) => draftAction(draft) === 'update')
+  const inserts = toAdd.map(draftToInsert)
+  const updates = toUpdate.map(draftToUpdate)
+  const incomplete = inserts.some((insert) => insert === null) || updates.some((update) => update === null)
+  const confirmLabel = batchLabel(toAdd.length, toUpdate.length)
+  const matched = drafts.filter((draft) => draft.match).length
+  const changed = toUpdate.length
 
   function trackPreview(file: File): string {
     const url = URL.createObjectURL(file)
@@ -263,7 +274,7 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
         setStage('pick')
         return
       }
-      setDrafts(candidates.map(draftFromCandidate))
+      setDrafts(candidates.map((candidate, index) => draftFromCandidate(candidate, index, existingBills)))
       setStage('review')
     } catch (err) {
       if (session.current !== current) return
@@ -277,11 +288,12 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
     }
   }
 
-  async function addBills() {
+  async function confirmImport() {
     const bills = inserts.filter((insert): insert is BillInsert => insert !== null)
-    if (bills.length === 0 || incomplete) return
+    const amountUpdates = updates.filter((update): update is NonNullable<typeof update> => update !== null)
+    if (bills.length + amountUpdates.length === 0 || incomplete) return
     setAdding(true)
-    const saved = await onAddBills(bills)
+    const saved = await onImport(bills, amountUpdates)
     setAdding(false)
     if (saved) handleOpenChange(false)
   }
@@ -297,8 +309,8 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
       ? "Drop in statements, screenshots, or photos of bills — we'll pull out the bills and due dates."
       : stage === 'extracting'
         ? `Finding bills in ${plural(sendable.length, 'file')}.`
-        : duplicates > 0
-          ? `Found ${plural(drafts.length, 'bill')}. ${duplicates === 1 ? 'One looks' : `${duplicates} look`} like a bill you already have, so ${duplicates === 1 ? 'it starts' : 'they start'} unchecked.`
+        : matched > 0
+          ? `Found ${plural(drafts.length, 'bill')}. ${matched === 1 ? 'One matches a bill' : `${matched} match bills`} you already have — ${changed > 0 ? 'new amounts are set to update' : 'amounts are unchanged, so they’re skipped'}.`
           : `Found ${plural(drafts.length, 'bill')}. Check the details, then add them.`
 
   return (
@@ -460,8 +472,8 @@ export function ScanDialog({ open, onOpenChange, existingBills, onAddBills }: Sc
               <Button type="button" variant="outline" onClick={backToFiles} disabled={adding}>
                 Back
               </Button>
-              <Button type="button" onClick={addBills} disabled={included.length === 0 || incomplete || adding}>
-                {adding ? 'Adding…' : included.length === 0 ? 'Add bills' : `Add ${plural(included.length, 'bill')}`}
+              <Button type="button" onClick={confirmImport} disabled={!confirmLabel || incomplete || adding}>
+                {adding ? 'Saving…' : (confirmLabel ?? 'Nothing to save')}
               </Button>
             </>
           )}

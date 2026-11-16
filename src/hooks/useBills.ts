@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { requestHorizonSync } from '@/lib/horizonSync'
+import { batchSummary } from '@/lib/importActions'
 import type { Bill, BillInsert, BillUpdate } from '@/types/bills'
 
 export function useBills() {
@@ -59,8 +60,11 @@ export function useBills() {
     await fetchBills()
   }
 
-  /** Adds several bills in one insert (all or nothing); true when they were saved. */
-  async function createBills(newBills: BillInsert[]): Promise<boolean> {
+  /**
+   * Adds several bills in one insert (all or nothing); true when they were saved.
+   * `quiet` leaves the toast, sync, and reload to a caller batching several writes.
+   */
+  async function createBills(newBills: BillInsert[], { quiet = false } = {}): Promise<boolean> {
     if (!user || newBills.length === 0) return false
     const { error } = await supabase
       .from('bills')
@@ -69,14 +73,16 @@ export function useBills() {
       toast.error(`Failed to add bills: ${error.message}`)
       return false
     }
+    if (quiet) return true
     toast.success(newBills.length === 1 ? 'Bill added' : `${newBills.length} bills added`)
     syncPlan(user.id)
     await fetchBills()
     return true
   }
 
-  async function updateBill(id: string, updates: BillUpdate) {
-    if (!user) return
+  /** True when saved; `quiet` as for createBills. */
+  async function updateBill(id: string, updates: BillUpdate, { quiet = false } = {}): Promise<boolean> {
+    if (!user) return false
     const { error } = await supabase
       .from('bills')
       .update(updates)
@@ -84,11 +90,36 @@ export function useBills() {
       .eq('user_id', user.id)
     if (error) {
       toast.error(`Failed to update bill: ${error.message}`)
-      return
+      return false
     }
+    if (quiet) return true
     toast.success('Bill updated')
     syncPlan(user.id)
     await fetchBills()
+    return true
+  }
+
+  /**
+   * An import batch: updates first, then the inserts, then one sync for the lot. Updates go
+   * first because re-running them is harmless — after any failure the user can retry the
+   * whole batch without duplicating bills. True when everything was saved.
+   */
+  async function importBills(
+    inserts: BillInsert[],
+    updates: { id: string; updates: BillUpdate }[],
+  ): Promise<boolean> {
+    if (!user || (inserts.length === 0 && updates.length === 0)) return false
+    const results = await Promise.all(updates.map((entry) => updateBill(entry.id, entry.updates, { quiet: true })))
+    const updated = results.filter(Boolean).length
+    const updatesOk = updated === updates.length
+    const added = updatesOk && inserts.length > 0 && (await createBills(inserts, { quiet: true })) ? inserts.length : 0
+    if (added + updated > 0) {
+      syncPlan(user.id)
+      await fetchBills()
+    }
+    const ok = updatesOk && added === inserts.length
+    if (ok) toast.success(batchSummary(added, updated))
+    return ok
   }
 
   async function deleteBill(id: string) {
@@ -111,5 +142,15 @@ export function useBills() {
     await updateBill(id, { active })
   }
 
-  return { bills, loading, createBill, createBills, updateBill, deleteBill, toggleActive, refresh: fetchBills }
+  return {
+    bills,
+    loading,
+    createBill,
+    createBills,
+    updateBill,
+    importBills,
+    deleteBill,
+    toggleActive,
+    refresh: fetchBills,
+  }
 }

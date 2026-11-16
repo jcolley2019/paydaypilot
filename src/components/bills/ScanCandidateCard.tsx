@@ -13,8 +13,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { DayOfMonthPicker } from '@/components/bills/DayOfMonthPicker'
-import { draftIssues, type CandidateDraft, type DueRuleDraft } from '@/components/bills/scanDraft'
+import { draftAction, draftIssues, type CandidateDraft, type DueRuleDraft } from '@/components/bills/scanDraft'
 import { CATEGORY_LABELS, CSP_BUCKET_LABELS, formatAmount } from '@/lib/billLabels'
+import { sameAmount, type BillMatch, type ImportAction } from '@/lib/importActions'
 import { cn } from '@/lib/utils'
 import type { AccountType, BillCategory, CspBucket, DueRule } from '@/types/bills'
 import { BILL_CATEGORIES, CSP_BUCKETS } from '@/types/bills'
@@ -145,6 +146,64 @@ function DueRuleFields({ id, rule, issue, onChange }: DueRuleFieldsProps) {
   )
 }
 
+const MATCH_ACTIONS: { value: ImportAction; label: string }[] = [
+  { value: 'update', label: 'Update' },
+  { value: 'skip', label: 'Skip' },
+  { value: 'add', label: 'Add as new' },
+]
+
+/** Compact Update / Skip / Add-as-new picker for a matched card, built on native radios. */
+function MatchActionControl({
+  name,
+  value,
+  billName,
+  onChange,
+}: {
+  name: string
+  value: ImportAction
+  billName: string
+  onChange: (action: ImportAction) => void
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={`What to do with ${billName}`}
+      className="grid grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5 text-xs"
+    >
+      {MATCH_ACTIONS.map((option) => (
+        <label
+          key={option.value}
+          className="flex h-7 cursor-pointer items-center justify-center rounded-md px-2 font-medium whitespace-nowrap text-muted-foreground transition-colors has-checked:bg-background has-checked:text-foreground has-checked:shadow-sm has-focus-visible:ring-2 has-focus-visible:ring-ring/50"
+        >
+          <input
+            type="radio"
+            name={name}
+            value={option.value}
+            checked={value === option.value}
+            onChange={() => onChange(option.value)}
+            className="sr-only"
+          />
+          {option.label}
+        </label>
+      ))}
+    </div>
+  )
+}
+
+/** "matches T-Mobile · current $94.55 → new $97.20" */
+function MatchLine({ match, amount }: { match: BillMatch; amount: string }) {
+  const next = Number(amount)
+  const valid = amount.trim() !== '' && Number.isFinite(next) && next > 0
+  return (
+    <p className="min-w-0 text-xs text-muted-foreground">
+      matches <span className="font-medium text-foreground">{match.name}</span> · current{' '}
+      <span className="pp-money">{money(match.amount)}</span> → new{' '}
+      <span className="pp-money font-medium text-foreground">{valid ? money(next) : '—'}</span>
+      {valid && sameAmount(next, match.amount) && ' · no change'}
+    </p>
+  )
+}
+
 interface ScanCandidateCardProps {
   draft: CandidateDraft
   onChange: (draft: CandidateDraft) => void
@@ -155,22 +214,37 @@ export function ScanCandidateCard({ draft, onChange }: ScanCandidateCardProps) {
   const issues = draftIssues(draft)
   const debt = debtSummary(draft)
   const lowConfidence = draft.confidence < LOW_CONFIDENCE
+  const action = draftAction(draft)
+  const { match } = draft
+  // Unmatched cards keep the checkbox; their details line up past it.
+  const indent = match ? undefined : 'pl-7'
 
   function update(changes: Partial<CandidateDraft>) {
     onChange({ ...draft, ...changes })
   }
 
+  const summary = (
+    <>
+      <span className="truncate font-medium">{draft.name}</span>
+      <span className="pp-money shrink-0 text-sm">
+        {formatAmount(Number(draft.amount) || 0, draft.base.amount_type)}
+      </span>
+    </>
+  )
+
   return (
-    <Card size="sm" className={cn(!draft.include && 'bg-transparent')}>
+    <Card size="sm" className={cn(action === 'skip' && 'bg-transparent')}>
       <CardContent className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
-          <Checkbox
-            id={`${id}-include`}
-            checked={draft.include}
-            onCheckedChange={(checked) => update({ include: checked === true })}
-            aria-label={`Add ${draft.name || 'this bill'}`}
-          />
-          {draft.include ? (
+          {!match && (
+            <Checkbox
+              id={`${id}-include`}
+              checked={action === 'add'}
+              onCheckedChange={(checked) => update({ override: checked === true ? 'add' : 'skip' })}
+              aria-label={`Add ${draft.name || 'this bill'}`}
+            />
+          )}
+          {action === 'add' ? (
             <Input
               aria-label="Bill name"
               value={draft.name}
@@ -178,47 +252,78 @@ export function ScanCandidateCard({ draft, onChange }: ScanCandidateCardProps) {
               onChange={(e) => update({ name: e.target.value })}
               className="font-medium"
             />
+          ) : match ? (
+            <div
+              className={cn(
+                'flex min-w-0 flex-1 items-baseline justify-between gap-3',
+                action === 'skip' && 'text-muted-foreground',
+              )}
+            >
+              {summary}
+            </div>
           ) : (
             <label
               htmlFor={`${id}-include`}
               className="flex min-w-0 flex-1 items-baseline justify-between gap-3 text-muted-foreground"
             >
-              <span className="truncate font-medium">{draft.name}</span>
-              <span className="pp-money shrink-0 text-sm">
-                {formatAmount(Number(draft.amount) || 0, draft.base.amount_type)}
-              </span>
+              {summary}
             </label>
           )}
         </div>
-        {draft.include && issues.name && <p className="-mt-1.5 pl-7 text-xs text-destructive">{issues.name}</p>}
+        {action === 'add' && issues.name && (
+          <p className={cn('-mt-1.5 text-xs text-destructive', indent)}>{issues.name}</p>
+        )}
 
-        {(draft.duplicateOf || lowConfidence) && (
-          <div className="flex flex-wrap gap-1.5 pl-7">
-            {draft.duplicateOf && (
-              <Badge
-                variant="outline"
-                className="max-w-full border-amber-500/40 bg-amber-500/10 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300"
-              >
-                <span className="truncate">matches {draft.duplicateOf}</span>
-              </Badge>
-            )}
-            {lowConfidence && (
-              <Badge variant="outline" className="text-muted-foreground">
-                Low confidence — double-check
-              </Badge>
-            )}
+        {match && (
+          <div className="flex flex-col gap-2">
+            <MatchLine match={match} amount={draft.amount} />
+            <MatchActionControl
+              name={`${id}-action`}
+              value={action}
+              billName={match.name}
+              onChange={(override) => update({ override })}
+            />
+          </div>
+        )}
+
+        {lowConfidence && (
+          <div className={cn('flex flex-wrap gap-1.5', indent)}>
+            <Badge variant="outline" className="text-muted-foreground">
+              Low confidence — double-check
+            </Badge>
           </div>
         )}
 
         {(debt || draft.evidence || draft.sourceFile) && (
-          <div className="flex min-w-0 flex-col gap-0.5 pl-7 text-xs text-muted-foreground">
+          <div className={cn('flex min-w-0 flex-col gap-0.5 text-xs text-muted-foreground', indent)}>
             {debt && <p>{debt}</p>}
             {draft.evidence && <p>{draft.evidence}</p>}
             {draft.sourceFile && <p className="pp-label truncate">{draft.sourceFile}</p>}
           </div>
         )}
 
-        {draft.include && (
+        {action === 'update' && (
+          <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
+            <Field
+              id={`${id}-amount`}
+              label={draft.base.amount_type === 'estimate' ? 'New amount (varies)' : 'New amount'}
+              error={issues.amount}
+            >
+              <Input
+                id={`${id}-amount`}
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={draft.amount}
+                aria-invalid={issues.amount ? true : undefined}
+                onChange={(e) => update({ amount: e.target.value })}
+              />
+            </Field>
+          </div>
+        )}
+
+        {action === 'add' && (
           <div className="flex flex-col gap-3 border-t border-border pt-3">
             <div className="grid grid-cols-2 gap-3">
               <Field
