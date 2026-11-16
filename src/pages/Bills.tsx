@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Camera, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useBills } from '@/hooks/useBills'
 import { BillCard } from '@/components/bills/BillCard'
 import { BillFormDialog } from '@/components/bills/BillFormDialog'
+import { ScanDialog } from '@/components/bills/ScanDialog'
 import { nextDueDate } from '@/lib/dueRules'
 import type { Bill, BillInsert } from '@/types/bills'
 
@@ -38,8 +39,9 @@ function sortBills(bills: Bill[]): Bill[] {
 }
 
 export function Bills() {
-  const { bills, loading, createBill, updateBill, deleteBill } = useBills()
+  const { bills, loading, createBill, createBills, updateBill, deleteBill } = useBills()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [scanOpen, setScanOpen] = useState(false)
   const [editingBill, setEditingBill] = useState<Bill | null>(null)
 
   const sorted = useMemo(() => sortBills(bills), [bills])
@@ -79,10 +81,16 @@ export function Bills() {
             estimated per month
           </p>
         </div>
-        <Button type="button" onClick={openAddDialog}>
-          <Plus className="size-4" />
-          Add bill
-        </Button>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={() => setScanOpen(true)}>
+            <Camera className="size-4" />
+            Scan
+          </Button>
+          <Button type="button" onClick={openAddDialog}>
+            <Plus className="size-4" />
+            Add bill
+          </Button>
+        </div>
       </div>
 
       {!loading && sorted.length === 0 && (
@@ -105,6 +113,13 @@ export function Bills() {
         onOpenChange={setDialogOpen}
         bill={editingBill}
         onSubmit={handleSubmit}
+      />
+
+      <ScanDialog
+        open={scanOpen}
+        onOpenChange={setScanOpen}
+        existingBills={bills}
+        onAddBills={createBills}
       />
     </div>
   )

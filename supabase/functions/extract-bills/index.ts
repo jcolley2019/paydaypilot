@@ -363,9 +363,9 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           model: Deno.env.get('ANTHROPIC_MODEL') ?? 'claude-sonnet-5-5',
-          max_tokens: 4096,
+          max_tokens: 16384,
           // Sonnet 5.5 thinks by default and thinking counts toward max_tokens; low effort is the
-          // documented setting for extraction and keeps the report inside the 4096 budget.
+          // documented setting for extraction and leaves the budget for the report itself.
           output_config: { effort: 'low' },
           tools: [REPORT_BILLS_TOOL],
           // Sonnet 5.5 rejects forced tool_choice ('tool' / 'any') with a 400, so the prompt asks

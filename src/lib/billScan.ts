@@ -25,18 +25,32 @@ function readAsBase64(file: File): Promise<string> {
   })
 }
 
-async function invokeErrorMessage(error: unknown): Promise<string> {
-  // Non-2xx responses carry the function's own { error } message in the body.
+/** A failed scan call. `status` is the HTTP status when the function (or its gateway) answered. */
+export class BillScanError extends Error {
+  readonly status: number | null
+
+  constructor(message: string, status: number | null) {
+    super(message)
+    this.name = 'BillScanError'
+    this.status = status
+  }
+}
+
+async function toScanError(error: unknown): Promise<BillScanError> {
+  // Non-2xx responses carry the function's own { error } message in the body; rejections from
+  // the gateway in front of it (e.g. a bad JWT) use { code, message } instead.
   if (error instanceof FunctionsHttpError) {
+    const response = error.context as Response
     try {
-      const body: unknown = await error.context.json()
-      const message = (body as { error?: unknown } | null)?.error
-      if (typeof message === 'string') return message
+      const body = (await response.json()) as { error?: unknown; message?: unknown } | null
+      const message = typeof body?.error === 'string' ? body.error : body?.message
+      if (typeof message === 'string') return new BillScanError(message, response.status)
     } catch {
       // Fall back to the generic message below.
     }
+    return new BillScanError(error.message, response.status)
   }
-  return error instanceof Error ? error.message : 'Bill scan failed.'
+  return new BillScanError(error instanceof Error ? error.message : 'Bill scan failed.', null)
 }
 
 export async function scanBills(
@@ -64,14 +78,14 @@ export async function scanBills(
   }
 
   const { data, error } = await supabase.functions.invoke<ScanResponse>('extract-bills', { body })
-  if (error) throw new Error(await invokeErrorMessage(error))
+  if (error) throw await toScanError(error)
   if (!data || !Array.isArray(data.candidates)) throw new Error('Bill scan returned an unexpected response.')
   return data.candidates
 }
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
-function isISODate(value: unknown): value is string {
+export function isISODate(value: unknown): value is string {
   return typeof value === 'string' && ISO_DATE_PATTERN.test(value) && toISODate(parseISODate(value)) === value
 }
 

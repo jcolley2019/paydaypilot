@@ -45,6 +45,21 @@ export function useBills() {
     await fetchBills()
   }
 
+  /** Adds several bills in one insert (all or nothing); true when they were saved. */
+  async function createBills(newBills: BillInsert[]): Promise<boolean> {
+    if (!user || newBills.length === 0) return false
+    const { error } = await supabase
+      .from('bills')
+      .insert(newBills.map((bill) => ({ ...bill, user_id: user.id })))
+    if (error) {
+      toast.error(`Failed to add bills: ${error.message}`)
+      return false
+    }
+    toast.success(newBills.length === 1 ? 'Bill added' : `${newBills.length} bills added`)
+    await fetchBills()
+    return true
+  }
+
   async function updateBill(id: string, updates: BillUpdate) {
     if (!user) return
     const { error } = await supabase
@@ -79,5 +94,5 @@ export function useBills() {
     await updateBill(id, { active })
   }
 
-  return { bills, loading, createBill, updateBill, deleteBill, toggleActive, refresh: fetchBills }
+  return { bills, loading, createBill, createBills, updateBill, deleteBill, toggleActive, refresh: fetchBills }
 }
