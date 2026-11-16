@@ -1,7 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { generatePayDates } from '@/lib/paydays'
-import { assignInstances } from '@/lib/assignment'
-import { planInstanceSync } from '@/lib/horizonPlan'
+import { planAssignmentUpdates, planInstanceSync, planPaycheckSync } from '@/lib/horizonPlan'
 import { addDays, toISODate } from '@/lib/localDate'
 import type { Bill } from '@/types/bills'
 import type { BillInstance, IncomeSource, Paycheck } from '@/types/payday'
@@ -60,32 +58,60 @@ async function fetchInstances(userId: string, from: string, to: string): Promise
   return (data ?? []) as BillInstance[]
 }
 
+/**
+ * The paychecks among `paycheckIds` that a bucket deposit was logged against. The deposit is a
+ * record of money that moved, so its paycheck is kept even when it is off schedule.
+ */
+async function fetchFundedPaycheckIds(paycheckIds: string[]): Promise<Set<string>> {
+  if (paycheckIds.length === 0) return new Set()
+  const { data, error } = await supabase
+    .from('bucket_entries')
+    .select('paycheck_id')
+    .in('paycheck_id', paycheckIds)
+  if (error) throw error
+  return new Set((data ?? []).map((entry) => entry.paycheck_id as string))
+}
+
 export async function syncHorizon(userId: string): Promise<void> {
   const today = new Date()
   const horizonEnd = addDays(today, HORIZON_DAYS)
   const from = toISODate(today)
   const to = toISODate(horizonEnd)
 
-  const [bufferDays, incomeSources, activeBills, existingInstances] = await Promise.all([
+  const [bufferDays, incomeSources, activeBills, existingInstances, existingPaychecks] = await Promise.all([
     fetchBufferDays(userId),
     fetchActiveIncomeSources(userId),
     fetchActiveBills(userId),
     fetchInstances(userId, from, to),
+    fetchPaychecks(userId, from, to),
   ])
 
-  const paycheckRows = incomeSources.flatMap((source) =>
-    generatePayDates(source, today, horizonEnd).map((date) => ({
-      user_id: userId,
-      income_source_id: source.id,
-      pay_date: toISODate(date),
-      expected_amount: source.net_amount,
-    })),
-  )
+  const paycheckPlan = planPaycheckSync(incomeSources, existingPaychecks, today, horizonEnd)
 
-  if (paycheckRows.length > 0) {
+  if (paycheckPlan.upserts.length > 0) {
     const { error } = await supabase
       .from('paychecks')
-      .upsert(paycheckRows, { onConflict: 'income_source_id,pay_date' })
+      .upsert(
+        paycheckPlan.upserts.map((row) => ({ user_id: userId, ...row })),
+        { onConflict: 'income_source_id,pay_date' },
+      )
+    if (error) throw error
+  }
+
+  // Stale paychecks go before anything is assigned: deleting one empties paycheck_id on its
+  // instances (ON DELETE SET NULL), and the assignment pass at the end re-homes them. The
+  // date and actual_amount filters repeat the plan's own rules, so a paycheck that was
+  // actualized since the fetch above is still left alone.
+  const fundedPaycheckIds = await fetchFundedPaycheckIds(paycheckPlan.deleteIds)
+  const stalePaycheckIds = paycheckPlan.deleteIds.filter((id) => !fundedPaycheckIds.has(id))
+  if (stalePaycheckIds.length > 0) {
+    const { error } = await supabase
+      .from('paychecks')
+      .delete()
+      .in('id', stalePaycheckIds)
+      .eq('user_id', userId)
+      .gte('pay_date', from)
+      .is('actual_amount', null)
     if (error) throw error
   }
 
@@ -131,17 +157,15 @@ export async function syncHorizon(userId: string): Promise<void> {
     fetchInstances(userId, from, to),
   ])
 
-  const assignments = assignInstances(instances, paychecks, bufferDays)
-  for (const instance of instances) {
-    if (instance.override || instance.status === 'paid') continue
-    const assignment = assignments.get(instance.id)
-    if (!assignment) continue
-    if (assignment.paycheckId !== instance.paycheck_id) {
-      const { error } = await supabase
-        .from('bill_instances')
-        .update({ paycheck_id: assignment.paycheckId })
-        .eq('id', instance.id)
-      if (error) throw error
-    }
+  for (const update of planAssignmentUpdates(instances, paychecks, bufferDays)) {
+    const { error } = await supabase
+      .from('bill_instances')
+      .update(
+        update.releaseOverride
+          ? { paycheck_id: update.paycheck_id, override: false }
+          : { paycheck_id: update.paycheck_id },
+      )
+      .eq('id', update.id)
+    if (error) throw error
   }
 }
