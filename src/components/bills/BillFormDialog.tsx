@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { ChevronDown } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,18 @@ import { CATEGORY_LABELS, CSP_BUCKET_LABELS } from '@/lib/billLabels'
 import { DayOfMonthPicker, type DayOfMonthValue } from '@/components/bills/DayOfMonthPicker'
 import { IntervalMonthsFields } from '@/components/bills/IntervalMonthsFields'
 import { MAX_INTERVAL_MONTHS, MIN_INTERVAL_MONTHS } from '@/lib/dueRules'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import {
+  ALL_TOUCHED,
+  UNTOUCHED,
+  applyNameGuess,
+  guessHint,
+  hasMoreOptionsValues,
+  type GuessTouched,
+} from '@/components/bills/billFormGuess'
+
+/** How long typing pauses before the name is re-guessed, so "Car" doesn't flash Debt on the way to "Car insurance". */
+const GUESS_DEBOUNCE_MS = 400
 
 type RuleType = DueRule['type']
 
@@ -157,6 +170,13 @@ function buildDueRule(form: FormState): DueRule {
   }
 }
 
+/** The form with the name's guess applied to any category/bucket the user hasn't picked. */
+function withGuess(form: FormState, touched: GuessTouched): FormState {
+  const next = applyNameGuess(form.name, { category: form.category, cspBucket: form.cspBucket }, touched)
+  if (next.category === form.category && next.cspBucket === form.cspBucket) return form
+  return { ...form, category: next.category, cspBucket: next.cspBucket }
+}
+
 interface BillFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -167,24 +187,49 @@ interface BillFormDialogProps {
 export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormDialogProps) {
   const [form, setForm] = useState<FormState>(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [touched, setTouched] = useState<GuessTouched>(UNTOUCHED)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open) {
       setForm(bill ? formFromBill(bill) : emptyForm())
+      setTouched(bill ? ALL_TOUCHED : UNTOUCHED)
+      setMoreOpen(bill ? hasMoreOptionsValues(bill) : false)
     }
   }, [open, bill])
+
+  // Re-guess once typing pauses; blur and save apply it immediately.
+  useEffect(() => {
+    if (!open || (touched.category && touched.cspBucket)) return
+    const timer = setTimeout(() => setForm((f) => withGuess(f, touched)), GUESS_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [open, form.name, touched])
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }))
   }
 
-  async function handleSubmit(e: FormEvent) {
+  const hint = guessHint({ category: form.category, cspBucket: form.cspBucket }, touched)
+
+  function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    void save(false)
+  }
+
+  function handleSaveAndAddAnother() {
+    if (!formRef.current?.reportValidity()) return
+    void save(true)
+  }
+
+  async function save(addAnother: boolean) {
+    const values = withGuess(form, touched)
     setSaving(true)
     try {
       await onSubmit({
-        name: form.name.trim(),
-        category: form.category,
+        name: values.name.trim(),
+        category: values.category,
         amount: Number(form.amount) || 0,
         amount_type: form.amountType,
         due_rule: buildDueRule(form),
@@ -207,11 +252,18 @@ export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormD
           form.isDebt && form.accountType === 'card' && form.minPaymentFloor
             ? Number(form.minPaymentFloor)
             : null,
-        csp_bucket: form.cspBucket,
+        csp_bucket: values.cspBucket,
         active: form.active,
         notes: form.notes.trim() || null,
       })
-      onOpenChange(false)
+      if (addAnother) {
+        setForm(emptyForm())
+        setTouched(UNTOUCHED)
+        setMoreOpen(false)
+        nameRef.current?.focus()
+      } else {
+        onOpenChange(false)
+      }
     } finally {
       setSaving(false)
     }
@@ -220,7 +272,7 @@ export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormD
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>{bill ? 'Edit bill' : 'Add bill'}</DialogTitle>
             <DialogDescription>
@@ -231,52 +283,32 @@ export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormD
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="bill-name">Name</Label>
             <Input
+              ref={nameRef}
               id="bill-name"
               value={form.name}
               onChange={(e) => update('name', e.target.value)}
+              onBlur={() => setForm((f) => withGuess(f, touched))}
+              aria-describedby={hint ? 'bill-name-hint' : undefined}
               required
             />
+            {hint && (
+              <p id="bill-name-hint" className="text-xs text-muted-foreground" aria-live="polite">
+                {hint}
+              </p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label>Category</Label>
-              <Select value={form.category} onValueChange={(v) => update('category', v as BillCategory)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {BILL_CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {CATEGORY_LABELS[c]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="bill-amount">Amount</Label>
-              <Input
-                id="bill-amount"
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.amount}
-                onChange={(e) => update('amount', e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border border-input px-3 py-2">
-            <Label htmlFor="bill-estimate" className="font-normal">
-              Amount is an estimate
-            </Label>
-            <Switch
-              id="bill-estimate"
-              checked={form.amountType === 'estimate'}
-              onCheckedChange={(checked) => update('amountType', checked ? 'estimate' : 'fixed')}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="bill-amount">Amount</Label>
+            <Input
+              id="bill-amount"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              value={form.amount}
+              onChange={(e) => update('amount', e.target.value)}
+              required
             />
           </div>
 
@@ -372,172 +404,227 @@ export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormD
             )}
           </div>
 
-          <div className="flex items-center justify-between rounded-lg border border-input px-3 py-2">
-            <Label htmlFor="bill-autopay" className="font-normal">
-              Autopay
-            </Label>
-            <Switch
-              id="bill-autopay"
-              checked={form.autopay}
-              onCheckedChange={(checked) => update('autopay', checked)}
-            />
-          </div>
+          <Collapsible open={moreOpen} onOpenChange={setMoreOpen} className="flex flex-col gap-4">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 rounded-lg px-1 py-1 text-left text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+              <span className="flex min-w-0 items-baseline gap-2">
+                <span className="shrink-0">More options</span>
+                <span className="truncate text-xs font-normal text-muted-foreground">
+                  Category, autopay, debt, notes
+                </span>
+              </span>
+              <ChevronDown
+                className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[var(--pp-ease)] group-data-[state=open]:rotate-180"
+                aria-hidden="true"
+              />
+            </CollapsibleTrigger>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="bill-payment-method">Payment method</Label>
-            <Input
-              id="bill-payment-method"
-              value={form.paymentMethod}
-              onChange={(e) => update('paymentMethod', e.target.value)}
-              placeholder="e.g. Chase checking"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label>CSP bucket</Label>
-            <Select
-              value={form.cspBucket}
-              onValueChange={(v) => update('cspBucket', v as CspBucket)}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CSP_BUCKETS.map((b) => (
-                  <SelectItem key={b} value={b}>
-                    {CSP_BUCKET_LABELS[b]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border border-input px-3 py-2">
-            <Label htmlFor="bill-is-debt" className="font-normal">
-              This is a debt payment
-            </Label>
-            <Switch
-              id="bill-is-debt"
-              checked={form.isDebt}
-              onCheckedChange={(checked) => update('isDebt', checked)}
-            />
-          </div>
-
-          {form.isDebt && (
-            <div className="flex flex-col gap-3">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="debt-balance">Balance</Label>
-                  <Input
-                    id="debt-balance"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={form.debtBalance}
-                    onChange={(e) => update('debtBalance', e.target.value)}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="debt-apr">APR %</Label>
-                  <Input
-                    id="debt-apr"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={form.debtApr}
-                    onChange={(e) => update('debtApr', e.target.value)}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="debt-min">Min payment</Label>
-                  <Input
-                    id="debt-min"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={form.debtMinPayment}
-                    onChange={(e) => update('debtMinPayment', e.target.value)}
-                  />
-                </div>
-              </div>
-
+            <CollapsibleContent className="-m-1 flex flex-col gap-4 overflow-hidden p-1 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <Label>Account type</Label>
+                  <Label>Category</Label>
                   <Select
-                    value={form.accountType}
-                    onValueChange={(v) => update('accountType', v as AccountType)}
+                    value={form.category}
+                    onValueChange={(v) => {
+                      update('category', v as BillCategory)
+                      setTouched((t) => ({ ...t, category: true }))
+                    }}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select type" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {ACCOUNT_TYPES.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {ACCOUNT_TYPE_LABELS[t]}
+                      {BILL_CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {CATEGORY_LABELS[c]}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                {form.accountType === 'card' && (
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="debt-credit-limit">Credit limit</Label>
-                    <Input
-                      id="debt-credit-limit"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={form.creditLimit}
-                      onChange={(e) => update('creditLimit', e.target.value)}
-                    />
-                  </div>
-                )}
+
+                <div className="flex flex-col gap-1.5">
+                  <Label>CSP bucket</Label>
+                  <Select
+                    value={form.cspBucket}
+                    onValueChange={(v) => {
+                      update('cspBucket', v as CspBucket)
+                      setTouched((t) => ({ ...t, cspBucket: true }))
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CSP_BUCKETS.map((b) => (
+                        <SelectItem key={b} value={b}>
+                          {CSP_BUCKET_LABELS[b]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
-              {form.accountType === 'card' && (
-                <div className="flex flex-col gap-2 rounded-lg border border-input p-3">
-                  <div className="grid grid-cols-2 gap-3">
+              <div className="flex items-center justify-between rounded-lg border border-input px-3 py-2">
+                <Label htmlFor="bill-estimate" className="font-normal">
+                  Amount is an estimate
+                </Label>
+                <Switch
+                  id="bill-estimate"
+                  checked={form.amountType === 'estimate'}
+                  onCheckedChange={(checked) => update('amountType', checked ? 'estimate' : 'fixed')}
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-input px-3 py-2">
+                <Label htmlFor="bill-autopay" className="font-normal">
+                  Autopay
+                </Label>
+                <Switch
+                  id="bill-autopay"
+                  checked={form.autopay}
+                  onCheckedChange={(checked) => update('autopay', checked)}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="bill-payment-method">Payment method</Label>
+                <Input
+                  id="bill-payment-method"
+                  value={form.paymentMethod}
+                  onChange={(e) => update('paymentMethod', e.target.value)}
+                  placeholder="e.g. Chase checking"
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-input px-3 py-2">
+                <Label htmlFor="bill-is-debt" className="font-normal">
+                  This is a debt payment
+                </Label>
+                <Switch
+                  id="bill-is-debt"
+                  checked={form.isDebt}
+                  onCheckedChange={(checked) => update('isDebt', checked)}
+                />
+              </div>
+
+              {form.isDebt && (
+                <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="debt-min-percent">Minimum payment %</Label>
+                      <Label htmlFor="debt-balance">Balance</Label>
                       <Input
-                        id="debt-min-percent"
+                        id="debt-balance"
                         type="number"
                         step="0.01"
                         min="0"
-                        value={form.minPaymentPercent}
-                        onChange={(e) => update('minPaymentPercent', e.target.value)}
+                        value={form.debtBalance}
+                        onChange={(e) => update('debtBalance', e.target.value)}
                       />
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="debt-min-floor">Minimum floor $</Label>
+                      <Label htmlFor="debt-apr">APR %</Label>
                       <Input
-                        id="debt-min-floor"
+                        id="debt-apr"
                         type="number"
                         step="0.01"
                         min="0"
-                        value={form.minPaymentFloor}
-                        onChange={(e) => update('minPaymentFloor', e.target.value)}
+                        value={form.debtApr}
+                        onChange={(e) => update('debtApr', e.target.value)}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="debt-min">Min payment</Label>
+                      <Input
+                        id="debt-min"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={form.debtMinPayment}
+                        onChange={(e) => update('debtMinPayment', e.target.value)}
                       />
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    From your statement, e.g. 2% or $25, whichever is greater — leave blank to use
-                    the fixed minimum payment above.
-                  </p>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label>Account type</Label>
+                      <Select
+                        value={form.accountType}
+                        onValueChange={(v) => update('accountType', v as AccountType)}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ACCOUNT_TYPES.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {ACCOUNT_TYPE_LABELS[t]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {form.accountType === 'card' && (
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="debt-credit-limit">Credit limit</Label>
+                        <Input
+                          id="debt-credit-limit"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={form.creditLimit}
+                          onChange={(e) => update('creditLimit', e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {form.accountType === 'card' && (
+                    <div className="flex flex-col gap-2 rounded-lg border border-input p-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="debt-min-percent">Minimum payment %</Label>
+                          <Input
+                            id="debt-min-percent"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={form.minPaymentPercent}
+                            onChange={(e) => update('minPaymentPercent', e.target.value)}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="debt-min-floor">Minimum floor $</Label>
+                          <Input
+                            id="debt-min-floor"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={form.minPaymentFloor}
+                            onChange={(e) => update('minPaymentFloor', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        From your statement, e.g. 2% or $25, whichever is greater — leave blank to use
+                        the fixed minimum payment above.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="bill-notes">Notes</Label>
-            <Textarea
-              id="bill-notes"
-              value={form.notes}
-              onChange={(e) => update('notes', e.target.value)}
-            />
-          </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="bill-notes">Notes</Label>
+                <Textarea
+                  id="bill-notes"
+                  value={form.notes}
+                  onChange={(e) => update('notes', e.target.value)}
+                />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           {bill && (
             <div className="flex items-center justify-between rounded-lg border border-input px-3 py-2">
@@ -556,6 +643,16 @@ export function BillFormDialog({ open, onOpenChange, bill, onSubmit }: BillFormD
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
+            {!bill && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving}
+                onClick={handleSaveAndAddAnother}
+              >
+                Save & add another
+              </Button>
+            )}
             <Button type="submit" disabled={saving}>
               {saving ? 'Saving…' : bill ? 'Save changes' : 'Add bill'}
             </Button>
