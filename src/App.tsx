@@ -12,6 +12,7 @@ import { Buckets } from '@/pages/Buckets'
 import { Credit } from '@/pages/Credit'
 import { Plan } from '@/pages/Plan'
 import { Settings } from '@/pages/Settings'
+import { PlaidOAuth } from '@/pages/PlaidOAuth'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { OfflineBanner } from '@/components/layout/OfflineBanner'
@@ -46,6 +47,7 @@ function App() {
           <Route path="/credit" element={<Credit />} />
           <Route path="/plan" element={<Plan />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/plaid-oauth" element={<PlaidOAuth />} />
         </Route>
       </Routes>
       <Toaster position="top-right" />

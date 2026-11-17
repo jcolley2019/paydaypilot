@@ -4,10 +4,13 @@
 // Flow: /sandbox/public_token/create (ins_109508, transactions) -> exchange -> /accounts/get
 // -> full /transactions/sync loop through the shared mapping (retrying while the sandbox's
 // first pull is still empty) -> encrypt/decrypt the access token -> /item/remove.
+// PP.9.3 — also /link/token/create WITH PLAID_REDIRECT_URI, new and update mode, using the
+// Edge Function's own request builder. Fails if the URI is not in the Dashboard allowlist.
 import { readFileSync } from 'node:fs'
 import { fetchSyncUpdates, plaidConfigFrom, plaidRequest, type PlaidConfig } from '../supabase/functions/_shared/plaidApi.ts'
 import { collapseSyncUpdates, mapAccount, mapTransaction, type PlaidAccount } from '../supabase/functions/_shared/plaidMapping.ts'
 import { decryptToken, encryptToken } from '../supabase/functions/_shared/tokenCrypto.ts'
+import { buildLinkTokenRequest, linkTokenRedirectUri } from '../supabase/functions/_shared/linkToken.ts'
 
 const ENV_PATH = new URL('../supabase/functions/.env', import.meta.url)
 const RETRY_FOR_MS = 30_000
@@ -34,6 +37,18 @@ async function main(): Promise<void> {
   const tokenKey = env.PLAID_TOKEN_KEY
   if (!tokenKey) throw new Error('PLAID_TOKEN_KEY not set')
   const plaid: PlaidConfig = config
+  const configuredRedirect = env.PLAID_REDIRECT_URI
+  if (!configuredRedirect) throw new Error('PLAID_REDIRECT_URI not set')
+  // Same rule the function applies to the deployed app's Origin header.
+  const redirectUri = linkTokenRedirectUri(new URL(configuredRedirect).origin, configuredRedirect)
+  if (!redirectUri) throw new Error('PLAID_REDIRECT_URI is not a valid URL')
+
+  await plaidRequest<{ link_token: string }>(
+    plaid,
+    '/link/token/create',
+    buildLinkTokenRequest({ userId: 'smoke-user', redirectUri }),
+  )
+  step('link token created with redirect_uri', 'new connection')
 
   const { public_token } = await plaidRequest<{ public_token: string }>(plaid, '/sandbox/public_token/create', {
     institution_id: 'ins_109508',
@@ -54,6 +69,13 @@ async function main(): Promise<void> {
       access_token: accessToken,
     })
     step('item looked up', `institution ${item.institution_id ?? 'none'}`)
+
+    await plaidRequest<{ link_token: string }>(
+      plaid,
+      '/link/token/create',
+      buildLinkTokenRequest({ userId: 'smoke-user', accessToken, redirectUri }),
+    )
+    step('link token created with redirect_uri', 'update mode')
 
     const now = new Date().toISOString()
     const { accounts } = await plaidRequest<{ accounts: PlaidAccount[] }>(plaid, '/accounts/get', { access_token: accessToken })

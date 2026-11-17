@@ -7,6 +7,12 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { PLAID_GENERIC_MESSAGE, plaidErrorMessage } from '@/lib/plaidConnect'
 import {
+  browserStorage,
+  clearPlaidOAuthResume,
+  savePlaidOAuthResume,
+  type PlaidOAuthSession,
+} from '@/lib/plaidOAuth'
+import {
   PlaidCallError,
   backgroundSyncCount,
   createLinkToken,
@@ -22,11 +28,7 @@ import type { PlaidAccountRow, PlaidItem, PlaidSyncResponse } from '@/types/plai
 export type PlaidBusy = 'idle' | 'opening' | 'connecting' | 'syncing'
 
 /** A Link session waiting to open: a new connection, or update mode for one bank. */
-export interface PlaidLinkSession {
-  token: string
-  mode: 'new' | 'update'
-  itemId?: string
-}
+export type PlaidLinkSession = PlaidOAuthSession
 
 function toastPlaidError(err: unknown) {
   if (err instanceof PlaidCallError) {
@@ -113,7 +115,10 @@ export function usePlaid() {
     setBusy('opening')
     try {
       const token = await createLinkToken(itemId)
-      setLinkSession(itemId ? { token, mode: 'update', itemId } : { token, mode: 'new' })
+      const session: PlaidLinkSession = itemId ? { token, mode: 'update', itemId } : { token, mode: 'new' }
+      // PP.9.3 — kept so /plaid-oauth can resume if the bank's sign-in redirects the browser away.
+      savePlaidOAuthResume(browserStorage(), session, Date.now())
+      setLinkSession(session)
       // busy stays 'opening' until Link reports success or exit.
     } catch (err) {
       toastPlaidError(err)
@@ -124,14 +129,12 @@ export function usePlaid() {
   const connect = () => openLink()
   const reconnect = (itemId: string) => openLink(itemId)
 
-  /** Link finished. In update mode the public token is not exchanged — the bank is re-synced. */
-  async function handleLinkSuccess(publicToken: string | null) {
-    const session = linkSession
-    setLinkSession(null)
-    if (!session) {
-      setBusy('idle')
-      return
-    }
+  /**
+   * Finishes a Link session (here, or resumed on /plaid-oauth). In update mode the public
+   * token is not exchanged — the bank is re-synced. Both calls go through the sync queue.
+   */
+  async function completeLink(session: PlaidLinkSession, publicToken: string | null) {
+    clearPlaidOAuthResume(browserStorage())
     try {
       if (session.mode === 'update' && session.itemId) {
         setBusy('syncing')
@@ -153,14 +156,28 @@ export function usePlaid() {
     }
   }
 
+  /** Link finished. */
+  async function handleLinkSuccess(publicToken: string | null) {
+    const session = linkSession
+    setLinkSession(null)
+    if (!session) {
+      clearPlaidOAuthResume(browserStorage())
+      setBusy('idle')
+      return
+    }
+    await completeLink(session, publicToken)
+  }
+
   /** The user closed Link (or Link ended on its own error screen): not an error, no toast. */
   function handleLinkExit() {
+    clearPlaidOAuthResume(browserStorage())
     setLinkSession(null)
     setBusy('idle')
   }
 
   /** The Plaid script could not load. */
   function handleLinkLoadError() {
+    clearPlaidOAuthResume(browserStorage())
     setLinkSession(null)
     setBusy('idle')
     toast.error(PLAID_GENERIC_MESSAGE)
@@ -192,6 +209,7 @@ export function usePlaid() {
     connect,
     reconnect,
     sync,
+    completeLink,
     handleLinkSuccess,
     handleLinkExit,
     handleLinkLoadError,

@@ -25,6 +25,8 @@ export interface PlaidContext {
   plaid: PlaidConfig
   tokenKey: string
   body: Record<string, unknown>
+  /** The request's Origin header (null when absent). */
+  origin: string | null
 }
 
 class HttpError extends Error {
@@ -82,7 +84,7 @@ async function authenticate(req: Request): Promise<PlaidContext> {
   const admin = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
-  return { user, admin, plaid, tokenKey, body }
+  return { user, admin, plaid, tokenKey, body, origin: req.headers.get('Origin') }
 }
 
 /** Wraps a Plaid function: OPTIONS, POST-only, auth + allowlist, uniform JSON errors. */
