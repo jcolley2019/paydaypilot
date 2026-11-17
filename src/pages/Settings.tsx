@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -6,8 +6,11 @@ import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/ca
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useIncomeSources } from '@/hooks/useIncomeSources'
 import { useTheme } from '@/hooks/useTheme'
+import { usePlaid } from '@/hooks/usePlaid'
 import { IncomeSourceCard } from '@/components/income/IncomeSourceCard'
 import { IncomeSourceFormDialog } from '@/components/income/IncomeSourceFormDialog'
+import { BankConnectionsSection } from '@/components/settings/BankConnectionsSection'
+import { PlaidLinkLauncher } from '@/components/settings/PlaidLinkLauncher'
 import type { IncomeSource, IncomeSourceInsert } from '@/types/payday'
 import type { Theme } from '@/lib/theme'
 
@@ -21,6 +24,13 @@ export function Settings() {
     addManualPaycheck,
   } = useIncomeSources()
   const { theme, setTheme } = useTheme()
+  const plaid = usePlaid()
+  // Keeps the "Synced <relative time>" label current while the page stays open.
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(id)
+  }, [])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingSource, setEditingSource] = useState<IncomeSource | null>(null)
 
@@ -96,6 +106,28 @@ export function Settings() {
           onSubmit={handleSubmit}
         />
       </section>
+
+      <BankConnectionsSection
+        items={plaid.items}
+        accounts={plaid.accounts}
+        transactionCount={plaid.transactionCount}
+        loading={plaid.loading}
+        busy={plaid.busy}
+        syncRunning={plaid.syncRunning}
+        now={now}
+        onConnect={plaid.connect}
+        onReconnect={plaid.reconnect}
+        onSync={plaid.sync}
+      />
+      {plaid.linkSession && (
+        <PlaidLinkLauncher
+          key={plaid.linkSession.token}
+          token={plaid.linkSession.token}
+          onSuccess={plaid.handleLinkSuccess}
+          onExit={plaid.handleLinkExit}
+          onLoadError={plaid.handleLinkLoadError}
+        />
+      )}
 
       <section className="flex flex-col gap-4">
         <div>

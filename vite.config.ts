@@ -38,9 +38,13 @@ export default defineConfig({
         // data is ever written to a cache.
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}'],
         navigateFallback: '/index.html',
+        // Edge Functions (/functions/v1/*, e.g. plaid-*) match no route at all, so the
+        // worker never intercepts them; nothing matches cdn.plaid.com either (Plaid Link's
+        // script and iframe stay entirely outside the worker).
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.hostname.endsWith('.supabase.co'),
+            urlPattern: ({ url }) =>
+              url.hostname.endsWith('.supabase.co') && !url.pathname.startsWith('/functions/'),
             handler: 'NetworkOnly',
           },
         ],

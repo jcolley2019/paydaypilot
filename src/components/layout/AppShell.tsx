@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { navItems } from './nav-items'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
+import { PlaidAutoSync } from './PlaidAutoSync'
 
 export function AppShell() {
   const { user, profile, signOut } = useAuth()
@@ -18,6 +19,7 @@ export function AppShell() {
 
   return (
     <div className="min-h-svh bg-background text-foreground">
+      <PlaidAutoSync />
       <div className="flex min-h-svh">
         <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-background md:flex">
           <div className="flex h-16 items-center gap-2 border-b border-border px-6">
