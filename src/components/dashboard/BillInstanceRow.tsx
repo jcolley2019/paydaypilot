@@ -55,7 +55,7 @@ export function BillInstanceRow({
         </div>
         {isPaid && (
           <Badge variant="secondary" className="shrink-0">
-            Paid
+            {instance.paid_source === 'autopay' ? 'Autopaid' : 'Paid'}
           </Badge>
         )}
       </div>

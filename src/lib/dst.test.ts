@@ -322,6 +322,8 @@ describe('other addDays callers across DST', () => {
       override: false,
       status: 'planned',
       paid_at: null,
+      paid_source: null,
+      autopay_hold: false,
     }
     expect(assignInstances([bi], [pc], 3).get('bi-a')).toEqual({ paycheckId: 'pc-a', alert: 'none' })
   })
@@ -345,6 +347,8 @@ describe('other addDays callers across DST', () => {
       override: false,
       status: 'planned',
       paid_at: null,
+      paid_source: null,
+      autopay_hold: false,
     }
     expect(assignInstances([base], [pc], 3).get('bi-a')).toEqual({ paycheckId: 'pc-a', alert: 'none' })
     const tooSoon = { ...base, id: 'bi-b', due_date: '2026-11-02' }

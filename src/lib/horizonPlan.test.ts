@@ -32,6 +32,8 @@ function instance(overrides: Partial<BillInstance>): BillInstance {
     override: false,
     status: 'planned',
     paid_at: null,
+    paid_source: null,
+    autopay_hold: false,
     ...overrides,
   }
 }

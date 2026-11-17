@@ -1,6 +1,6 @@
 import { assignInstances } from '@/lib/assignment'
 import { generatePayDates, occurrencesForRule } from '@/lib/paydays'
-import { toISODate } from '@/lib/localDate'
+import { parseISODate, toISODate } from '@/lib/localDate'
 import type { Bill } from '@/types/bills'
 import type { BillInstance, IncomeSource, Paycheck } from '@/types/payday'
 
@@ -176,4 +176,34 @@ export function planAssignmentUpdates(
     }
   }
   return updates
+}
+
+export interface AutopayMark {
+  id: string
+  paid_at: string
+}
+
+/**
+ * The instances an autopay bill has paid by itself: planned, not held back by an undo, on an
+ * active bill with autopay on, and due on or before `today`. paid_at is the due date at local
+ * noon — the day the money went out — not the moment the sync happened to run.
+ */
+export function planAutopayMarks(
+  instances: BillInstance[],
+  activeBills: Pick<Bill, 'id' | 'autopay'>[],
+  today: Date,
+): AutopayMark[] {
+  const todayISO = toISODate(today)
+  const autopayBillIds = new Set(activeBills.filter((bill) => bill.autopay).map((bill) => bill.id))
+
+  const marks: AutopayMark[] = []
+  for (const instance of instances) {
+    if (instance.status !== 'planned' || instance.autopay_hold) continue
+    if (!autopayBillIds.has(instance.bill_id)) continue
+    if (instance.due_date > todayISO) continue
+    const due = parseISODate(instance.due_date)
+    const paidAt = new Date(due.getFullYear(), due.getMonth(), due.getDate(), 12)
+    marks.push({ id: instance.id, paid_at: paidAt.toISOString() })
+  }
+  return marks
 }

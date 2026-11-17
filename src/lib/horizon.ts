@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { planAssignmentUpdates, planInstanceSync, planPaycheckSync } from '@/lib/horizonPlan'
+import { planAssignmentUpdates, planAutopayMarks, planInstanceSync, planPaycheckSync } from '@/lib/horizonPlan'
 import { addDays, toISODate } from '@/lib/localDate'
 import type { Bill } from '@/types/bills'
 import type { BillInstance, IncomeSource, Paycheck } from '@/types/payday'
@@ -53,6 +53,24 @@ async function fetchInstances(userId: string, from: string, to: string): Promise
     .select('*')
     .eq('user_id', userId)
     .gte('due_date', from)
+    .lte('due_date', to)
+  if (error) throw error
+  return (data ?? []) as BillInstance[]
+}
+
+/**
+ * Planned, not-held instances of the given bills due on or before `to` — past dates included,
+ * so an autopay bill whose due date slipped by while the app was closed still gets marked.
+ */
+async function fetchAutopayCandidates(userId: string, billIds: string[], to: string): Promise<BillInstance[]> {
+  if (billIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('bill_instances')
+    .select('*')
+    .eq('user_id', userId)
+    .in('bill_id', billIds)
+    .eq('status', 'planned')
+    .eq('autopay_hold', false)
     .lte('due_date', to)
   if (error) throw error
   return (data ?? []) as BillInstance[]
@@ -166,6 +184,26 @@ export async function syncHorizon(userId: string): Promise<void> {
           : { paycheck_id: update.paycheck_id },
       )
       .eq('id', update.id)
+    if (error) throw error
+  }
+
+  // Autopay runs last. Paid instances are never reassigned, so marking one before the
+  // assignment pass would leave an instance created today, and due today, with no paycheck.
+  // The status/hold filters repeat the plan's own rules, so an instance the user marked or
+  // undid since the fetch is still left alone.
+  const autopayBillIds = activeBills.filter((bill) => bill.autopay).map((bill) => bill.id)
+  const candidates = await fetchAutopayCandidates(userId, autopayBillIds, from)
+  const idsByPaidAt = new Map<string, string[]>()
+  for (const { id, paid_at } of planAutopayMarks(candidates, activeBills, today)) {
+    idsByPaidAt.set(paid_at, [...(idsByPaidAt.get(paid_at) ?? []), id])
+  }
+  for (const [paidAt, ids] of idsByPaidAt) {
+    const { error } = await supabase
+      .from('bill_instances')
+      .update({ status: 'paid', paid_at: paidAt, paid_source: 'autopay' })
+      .in('id', ids)
+      .eq('status', 'planned')
+      .eq('autopay_hold', false)
     if (error) throw error
   }
 }

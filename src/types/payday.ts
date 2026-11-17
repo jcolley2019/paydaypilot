@@ -28,6 +28,7 @@ export interface Paycheck {
 
 export type InstanceStatus = 'planned' | 'paid' | 'skipped'
 export type InstanceAlert = 'none' | 'due_before_payday'
+export type PaidSource = 'manual' | 'autopay' | 'bank'
 
 export interface BillInstance {
   id: string
@@ -39,4 +40,8 @@ export interface BillInstance {
   override: boolean
   status: InstanceStatus
   paid_at: string | null
+  /** Who marked it paid: the user, the autopay step of a sync, or (later) a bank match. */
+  paid_source: PaidSource | null
+  /** Set when the user undoes a payment, so the autopay step never re-marks this instance. */
+  autopay_hold: boolean
 }

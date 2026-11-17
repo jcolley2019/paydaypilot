@@ -140,7 +140,7 @@ export function usePaydayEngine() {
   async function markPaid(instanceId: string) {
     const { error } = await supabase
       .from('bill_instances')
-      .update({ status: 'paid', paid_at: new Date().toISOString() })
+      .update({ status: 'paid', paid_at: new Date().toISOString(), paid_source: 'manual' })
       .eq('id', instanceId)
     if (error) {
       toast.error(`Failed to mark as paid: ${error.message}`)
@@ -150,9 +150,11 @@ export function usePaydayEngine() {
   }
 
   async function markUnpaid(instanceId: string) {
+    // The hold is set on every undo, whatever marked it paid: without it the next sync's
+    // autopay step would mark the instance paid again.
     const { error } = await supabase
       .from('bill_instances')
-      .update({ status: 'planned', paid_at: null })
+      .update({ status: 'planned', paid_at: null, paid_source: null, autopay_hold: true })
       .eq('id', instanceId)
     if (error) {
       toast.error(`Failed to revert: ${error.message}`)
